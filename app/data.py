@@ -116,6 +116,9 @@ def validate_and_clean_csv(file_bytes: bytes) -> pd.DataFrame:
     """Validate CSV content, enforce size limits, encoding, and clean column names."""
 
     MAX_SIZE_MB = 10
+    MAX_COLUMNS = 100
+    MIN_NUMERIC_COLUMNS = 1
+
     size_mb = len(file_bytes) / (1024 * 1024)
 
     if size_mb > MAX_SIZE_MB:
@@ -142,5 +145,44 @@ def validate_and_clean_csv(file_bytes: bytes) -> pd.DataFrame:
 
     # Drop fully empty columns
     df = df.dropna(axis=1, how="all")
+
+    # -----------------------------
+    # ANALYSBARHETS-VALIDERING
+    # -----------------------------
+
+    # 1. Dataset must have at least one row
+    if df.shape[0] < 1:
+        raise ValidationError("Dataset must contain at least one data row.")
+
+    # 2. Dataset must not be too wide
+    if df.shape[1] > MAX_COLUMNS:
+        raise ValidationError(
+            f"Dataset has {df.shape[1]} columns, exceeding the limit of {MAX_COLUMNS}."
+        )
+
+    # 3. Must contain at least one numeric column
+    numeric_cols = df.select_dtypes(include=["number"]).columns
+    if len(numeric_cols) < MIN_NUMERIC_COLUMNS:
+        raise ValidationError(
+            "Dataset must contain at least one numeric column for analysis."
+        )
+
+    # 4. Detect ID-like columns (100% unique)
+    id_like_columns = [
+        col for col in df.columns if df[col].nunique() == df.shape[0]
+    ]
+
+    if len(id_like_columns) == df.shape[1]:
+        raise ValidationError(
+            "Dataset appears to contain only ID-like columns (all values unique). "
+            "At least one column must contain repeated or aggregatable values."
+        )
+
+    # 5. Detect columns with all nulls
+    null_columns = [col for col in df.columns if df[col].isna().all()]
+    if null_columns:
+        raise ValidationError(
+            f"Dataset contains columns with only null values: {null_columns}"
+        )
 
     return df

@@ -12,7 +12,7 @@ def health_chech():
 async def upload_data(file: UploadFile = File(...)):
   """Upload a CSV file, validate it, load it into Pandas and store it in memory."""
   if not file.filename.endswith(".csv"):
-    rasie HTTPException(status_code=400, detail="File must be a CSV.")
+    raise HTTPException(status_code=400, detail="File must be a CSV.")
 
     try: 
       df = pd.read_csv(file.file)

@@ -1,11 +1,17 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.responses import StreamingResponse
+from fastapi.exceptions import RequestValidationError
+from app.errors import http_exception_handler, validation_exception_handler
 from app.data import data_service, validate_and_clean_csv
 from app.schemas import UploadResponse, StatsResponse
 from app.config import logger
 # Basic FastAPI app initialization
 # This file will later include routes for data upload, stats and AI queries.
 app = FastAPI()
+
+# Register global exception handlers
+app.add_exception_handler(HTTPException, http_exception_handler)
+app.add_exception_handler(Exception, validation_exception_handler)
 
 @app.get("/health")
 def health_chech():

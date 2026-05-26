@@ -30,3 +30,22 @@ def test_upload_and_stats():
   stats_response = client.get("/data/stats")
   assert stats_response.status_code == 200
   assert "stats" in stats_response.json()
+
+def test_upload_too_large_file():
+    """Uploading a file larger than allowed should return 400."""
+    big_content = b"a" * (11 * 1024 * 1024)  # 11 MB
+    response = client.post(
+        "/data/upload",
+        files={"file": ("big.csv", big_content)}
+    )
+    assert response.status_code == 400
+
+
+def test_upload_invalid_columns():
+    """Uploading a CSV with invalid column names should return 400."""
+    csv_content = b"Unnamed: 0,temp\n1,10"
+    response = client.post(
+        "/data/upload",
+        files={"file": ("bad.csv", csv_content)}
+    )
+    assert response.status_code == 400

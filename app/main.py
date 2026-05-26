@@ -15,6 +15,9 @@ from starlette.responses import Response
 from starlette.middleware.compression import CompressionMiddleware
 from starlette.middleware.timeout import TimeoutMiddleware
 
+from collections import deque
+import time
+
 from app.errors import (
     http_exception_handler,
     validation_exception_handler,
@@ -32,6 +35,18 @@ from app.config import logger
 
 
 app = FastAPI()
+
+from collections import deque
+import time
+
+# -----------------------------------
+# GLOBAL RATE ANOMALY TRACKER
+# -----------------------------------
+REQUEST_WINDOW_SECONDS = 10
+MAX_REQUESTS_IN_WINDOW = 200  # t.ex. 200 requests på 10 sekunder
+
+recent_requests = deque()
+
 
 # -----------------------------------
 # STARTUP & SHUTDOWN EVENTS
@@ -105,6 +120,44 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
 
 
 app.add_middleware(RequestIDMiddleware)
+
+# -----------------------------------
+# GLOBAL RATE ANOMALY DETECTION
+# -----------------------------------
+class GlobalRateAnomalyMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        now = time.time()
+
+        # Lägg till timestamp
+        recent_requests.append(now)
+
+        # Ta bort gamla timestamps
+        while recent_requests and recent_requests[0] < now - REQUEST_WINDOW_SECONDS:
+            recent_requests.popleft()
+
+        # Kontrollera om vi är över gränsen
+        if len(recent_requests) > MAX_REQUESTS_IN_WINDOW:
+            logger.warning({
+                "event": "global_rate_anomaly_detected",
+                "request_id": request.state.request_id,
+                "client_ip": request.client.host,
+                "requests_last_10s": len(recent_requests),
+                "limit": MAX_REQUESTS_IN_WINDOW
+            })
+
+            return JSONResponse(
+                status_code=429,
+                content={
+                    "error_type": "GlobalRateAnomaly",
+                    "message": "Traffic spike detected. Please slow down.",
+                    "request_id": request.state.request_id
+                }
+            )
+
+        return await call_next(request)
+
+app.add_middleware(GlobalRateAnomalyMiddleware)
+
 
 # -----------------------------------
 # REQUEST TIMEOUT PROTECTION

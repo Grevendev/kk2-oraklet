@@ -4,7 +4,6 @@ from collections import deque
 
 from fastapi import FastAPI, UploadFile, File, HTTPException, Request
 from fastapi.responses import StreamingResponse, JSONResponse
-from fastapi.exceptions import RequestValidationError
 from fastapi.concurrency import run_in_threadpool
 
 from slowapi import Limiter
@@ -98,7 +97,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response: Response = await call_next(request)
 
         response.headers["X-Frame-Options"] = "DENY"
-        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Content-Type-Options"] = "nosniff"]
         response.headers["Referrer-Policy"] = "no-referrer"
         response.headers["X-XSS-Protection"] = "1; mode=block"
         response.headers["Permissions-Policy"] = (
@@ -340,6 +339,27 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
         })
         raise SystemError(str(e))
 
+
+    # -----------------------------------
+    # SCHEMA FINGERPRINTING (detect schema drift)
+    # -----------------------------------
+    if data_service._df is not None:
+        if data_service.is_schema_changed(df):
+            logger.warning({
+                "event": "schema_changed",
+                "request_id": request.state.request_id,
+                "client_ip": request.client.host,
+                "old_fingerprint": data_service._schema_fingerprint,
+                "new_fingerprint": data_service.compute_schema_fingerprint(df),
+                "message": "Uploaded dataset schema differs from previous dataset."
+            })
+            # OPTIONAL:
+            # raise UserError("Uploaded dataset schema differs from the previously uploaded dataset.")
+
+
+    # -----------------------------------
+    # STORE DATASET
+    # -----------------------------------
     data_service.set_dataset(df)
 
     logger.info({

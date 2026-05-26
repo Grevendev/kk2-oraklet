@@ -1,4 +1,5 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi.responses import StreamingResponse
 from app.data import data_service, validate_and_clean_csv
 from app.schemas import UploadResponse, StatsResponse
 from app.config import logger
@@ -42,3 +43,32 @@ def get_stats():
         raise HTTPException(status_code=404, detail=str(e))
 
     return StatsResponse(stats=stats)
+
+@app.get("/data/download/csv")
+def download_csv():
+    """Return the stored dataset as a downloadable CSV file."""
+    try:
+        csv_bytes = data_service.get_csv()
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    return StreamingResponse(
+        iter([csv_bytes]),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=dataset.csv"}
+    )
+
+
+@app.get("/data/download/parquet")
+def download_parquet():
+    """Return the stored dataset as a downloadable Parquet file."""
+    try:
+        parquet_bytes = data_service.get_parquet()
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    return StreamingResponse(
+        iter([parquet_bytes]),
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": "attachment; filename=dataset.parquet"}
+    )

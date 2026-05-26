@@ -9,6 +9,8 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
+from starlette.middleware.gzip import GZipMiddleware
+from starlette.middleware.compression import CompressionMiddleware
 
 
 from app.errors import (
@@ -61,8 +63,21 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         )
 
         return response
+    
+# -----------------------------------
+# RESPONSE COMPRESSION (Brotli + GZip)
+# -----------------------------------
+app.add_middleware(
+    CompressionMiddleware,
+    minimum_size=500,
+    gzip=True,
+    brotli=True
+)
+
 
 app.add_middleware(SecurityHeadersMiddleware)
+
+
 
 
 # Register global exception handlers

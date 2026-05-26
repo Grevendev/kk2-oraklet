@@ -73,3 +73,13 @@ def test_upload_and_download_parquet():
    parquet_response = client.get("/data/download/parquet")
    assert parquet_response.status_code == 200
    assert parquet_response.headers["Content-Disposition"] == "attachment; filename=dataset.parquet"
+
+def test_error_model_structure():
+    """Ensure error responses follow the standardized ErrorResponse model."""
+    response = client.get("/data/stats")  # no dataset uploaded
+    assert response.status_code == 404
+
+    body = response.json()
+    assert "error_type" in body
+    assert "message" in body
+    assert "details" in body

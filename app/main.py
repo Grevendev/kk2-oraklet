@@ -34,13 +34,11 @@ async def upload_data(file: UploadFile = File(...)):
     )
   
 @app.get("/data/stats", response_model=StatsResponse)
-def get_status():
-  """Return descriptive statistics for the uploaded dataset."""
-  try:
-    df = get_dataset()
-  except ValueError as e:
-    raise HTTPException(status_code=404, detail=str(e))
-  
-  stats = df.describe(include="all").to_dict()
+def get_stats():
+    """Return descriptive statistics for the uploaded dataset."""
+    try:
+        stats = data_service.get_stats()
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
-  return StatsResponse(stats=stats)
+    return StatsResponse(stats=stats)

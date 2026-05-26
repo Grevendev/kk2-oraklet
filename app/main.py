@@ -1,6 +1,8 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.responses import StreamingResponse
 from fastapi.exceptions import RequestValidationError
+from fastapi.concurrency import run_in_threadpool
+
 
 from app.errors import (
     http_exception_handler,
@@ -37,14 +39,17 @@ def health_chech():
 
 @app.post("/data/upload", response_model=UploadResponse)
 async def upload_data(file: UploadFile = File(...)):
-    """Upload a CSV file, validate it, clean it and store it in memory."""
+    """Upload a CSV file, validate it asynchronously and store it in memory."""
+
     if not file.filename.endswith(".csv"):
         raise ValidationError("File must be a CSV.")
 
+    # Read file asynchronously
     file_bytes = await file.read()
 
+    # Run CPU-bound validation in a background thread
     try:
-        df = validate_and_clean_csv(file_bytes)
+        df = await run_in_threadpool(validate_and_clean_csv, file_bytes)
     except ValidationError as e:
         logger.error(f"CSV validation failed: {e}")
         raise e
@@ -52,6 +57,7 @@ async def upload_data(file: UploadFile = File(...)):
         logger.error(f"Unexpected CSV parsing error: {e}")
         raise SystemError(str(e))
 
+    # Store dataset (still sync, but very fast)
     data_service.set_dataset(df)
 
     return UploadResponse(

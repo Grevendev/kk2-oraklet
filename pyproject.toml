@@ -1,0 +1,13 @@
+[project]
+name = "kk2-oraklet"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "fastapi>=0.136.3",
+    "pandas>=3.0.3",
+    "pydantic>=2.13.4",
+    "transformers>=5.9.0",
+    "uvicorn>=0.48.0",
+]

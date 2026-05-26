@@ -170,7 +170,7 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
 @app.get("/data/stats", response_model=StatsResponse)
 @limiter.limit("20/minute")
 def get_stats(request: Request):
-    """Return descriptive statistics for the uploaded dataset."""
+    """Return descriptive statistics for the uploaded dataset with ETag caching."""
 
     logger.info({
         "event": "stats_requested",
@@ -178,17 +178,37 @@ def get_stats(request: Request):
         "user_agent": request.headers.get("User-Agent", "unknown")
     })
 
+    # Compute or fetch cached stats
     try:
         stats = data_service.get_stats()
     except ValidationError as e:
         raise UserError(str(e))
 
+    # Compute ETag
+    etag = data_service.get_stats_etag()
+
+    # Check If-None-Match
+    client_etag = request.headers.get("If-None-Match")
+    if client_etag == etag:
+        logger.info({
+            "event": "stats_not_modified",
+            "client_ip": request.client.host
+        })
+        return Response(status_code=304)
+
+    # Normal response
+    response = StatsResponse(stats=stats)
+    response = JSONResponse(content=response.model_dump())
+    response.headers["ETag"] = etag
+
     logger.info({
         "event": "stats_returned",
-        "client_ip": request.client.host
+        "client_ip": request.client.host,
+        "etag": etag
     })
 
-    return StatsResponse(stats=stats)
+    return response
+
 
 
 @app.get("/data/download/csv")

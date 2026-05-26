@@ -1,6 +1,8 @@
 import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
+import hashlib
+import json
 from typing import Optional, Dict, Any
 from datetime import datetime, timedelta
 
@@ -345,3 +347,18 @@ def validate_and_clean_csv(file_bytes: bytes) -> pd.DataFrame:
 
 
     return df
+
+def get_stats_etag(self) -> str:
+    """Return a stable ETag hash for the current stats cache."""
+    if self._stats_cache is None:
+        return ""
+
+    payload = {
+        "rows": self._stats_cache["_metadata"]["rows"],
+        "columns": self._stats_cache["_metadata"]["columns"],
+        "generated_at": self._stats_cache["_metadata"]["generated_at"],
+    }
+
+    raw = json.dumps(payload, sort_keys=True).encode("utf-8")
+    return hashlib.sha256(raw).hexdigest()
+

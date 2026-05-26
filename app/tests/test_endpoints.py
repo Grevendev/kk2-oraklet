@@ -49,3 +49,27 @@ def test_upload_invalid_columns():
         files={"file": ("bad.csv", csv_content)}
     )
     assert response.status_code == 400
+
+def test_download_csv_without_upload():
+   """Downloading CSV without uploading should return 404."""
+   response = client.get("/data/download/csv")
+   assert response.status_code == 404
+
+def test_download_parquet_without_upload():
+   """Downloading Parquet without uploading should return 404."""
+   response = client.get("/data/download/parquet")
+   assert response.status_code == 404
+
+def test_upload_and_download_parquet():
+   """Upload CSV and ensure Parquet download works."""
+   csv_content = b"city,temp\nMalmo,10\nLund,12"
+
+   upload_response = client.post(
+      "/data/upload",
+      files={"file": ("data.csv", csv_content)}
+   )
+   assert upload_response.status_code == 200
+
+   parquet_response = client.get("/data/download/parquet")
+   assert parquet_response.status_code == 200
+   assert parquet_response.headers["Content-Disposition"] == "attachment; filename=dataset.parquet"

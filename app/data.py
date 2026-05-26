@@ -250,24 +250,44 @@ def validate_and_clean_csv(file_bytes: bytes) -> pd.DataFrame:
         if df[col].dtype == object:
             df[col] = pd.to_datetime(df[col], errors="ignore")
 
-    # -----------------------------------
-    # ANALYSIS READINESS VALIDATION (unchanged)
+
+        # -----------------------------------
+    # ANALYSIS READINESS VALIDATION
     # -----------------------------------
 
+    # 1. Dataset must contain at least one row
     if df.shape[0] < 1:
         raise ValidationError("Dataset must contain at least one data row.")
 
+    # 2. Dataset must not be too wide
     if df.shape[1] > MAX_COLUMNS:
         raise ValidationError(
             f"Dataset has {df.shape[1]} columns, exceeding the limit of {MAX_COLUMNS}."
         )
 
+    # 3. Dataset must not be too deep
+    MAX_ROWS = 200_000
+    if df.shape[0] > MAX_ROWS:
+        raise ValidationError(
+            f"Dataset has {df.shape[0]} rows, exceeding the limit of {MAX_ROWS}."
+        )
+
+    # 4. Dataset must not exceed total cell limit
+    MAX_CELLS = 1_000_000
+    total_cells = df.shape[0] * df.shape[1]
+    if total_cells > MAX_CELLS:
+        raise ValidationError(
+            f"Dataset contains {total_cells:,} cells, exceeding the limit of {MAX_CELLS:,}."
+        )
+
+    # 5. Must contain at least one numeric column
     numeric_cols = df.select_dtypes(include=["number"]).columns
     if len(numeric_cols) < MIN_NUMERIC_COLUMNS:
         raise ValidationError(
             "Dataset must contain at least one numeric column for analysis."
         )
 
+    # 6. Detect ID-like columns (100% unique)
     id_like_columns = [
         col for col in df.columns if df[col].nunique() == df.shape[0]
     ]
@@ -278,10 +298,12 @@ def validate_and_clean_csv(file_bytes: bytes) -> pd.DataFrame:
             "At least one column must contain repeated or aggregatable values."
         )
 
+    # 7. Detect columns with all nulls
     null_columns = [col for col in df.columns if df[col].isna().all()]
     if null_columns:
         raise ValidationError(
             f"Dataset contains columns with only null values: {null_columns}"
         )
+
 
     return df

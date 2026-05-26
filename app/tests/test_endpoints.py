@@ -83,3 +83,19 @@ def test_error_model_structure():
     assert "error_type" in body
     assert "message" in body
     assert "details" in body
+
+def test_validation_error_for_empty_csv():
+    """Uploading an empty CSV should return 422 ValidationError."""
+    response = client.post(
+        "/data/upload",
+        files={"file": ("empty.csv", b"")}
+    )
+    assert response.status_code == 422
+    assert response.json()["error_type"] == "ValidationError"
+
+
+def test_user_error_for_stats_without_upload():
+    """Requesting stats without uploading should return 400 UserError."""
+    response = client.get("/data/stats")
+    assert response.status_code == 400
+    assert response.json()["error_type"] == "UserError"

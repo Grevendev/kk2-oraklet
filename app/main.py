@@ -58,7 +58,7 @@ def health_chech():
 
 @app.post("/data/upload", response_model=UploadResponse)
 @limiter.limit("5/minute")
-async def upload_data(file: UploadFile = File(...)):
+async def upload_data(request: Request, file: UploadFile = File(...)):
     """Upload a CSV file, validate it asynchronously and store it in memory."""
 
     if not file.filename.endswith(".csv"):
@@ -66,19 +66,48 @@ async def upload_data(file: UploadFile = File(...)):
 
     # Read file asynchronously
     file_bytes = await file.read()
+    file_size = len(file_bytes)
+
+    # Audit log: upload attempt
+    logger.info({
+        "event": "csv_upload_attempt",
+        "filename": file.filename,
+        "file_size_bytes": file_size,
+        "client_ip": request.client.host,
+        "user_agent": request.headers.get("User-Agent", "unknown")
+    })
 
     # Run CPU-bound validation in a background thread
     try:
         df = await run_in_threadpool(validate_and_clean_csv, file_bytes)
     except ValidationError as e:
-        logger.error(f"CSV validation failed: {e}")
+        logger.warning({
+            "event": "csv_upload_validation_failed",
+            "filename": file.filename,
+            "reason": str(e),
+            "client_ip": request.client.host
+        })
         raise e
     except Exception as e:
-        logger.error(f"Unexpected CSV parsing error: {e}")
+        logger.error({
+            "event": "csv_upload_unexpected_error",
+            "filename": file.filename,
+            "error": str(e),
+            "client_ip": request.client.host
+        })
         raise SystemError(str(e))
 
-    # Store dataset (still sync, but very fast)
+    # Store dataset
     data_service.set_dataset(df)
+
+    # Audit log: successful upload
+    logger.info({
+        "event": "csv_upload_success",
+        "filename": file.filename,
+        "rows": df.shape[0],
+        "columns": df.shape[1],
+        "client_ip": request.client.host
+    })
 
     return UploadResponse(
         rows=df.shape[0],
@@ -87,26 +116,51 @@ async def upload_data(file: UploadFile = File(...)):
     )
 
 
+
 @app.get("/data/stats", response_model=StatsResponse)
 @limiter.limit("20/minute")
-def get_stats():
+def get_stats(request: Request):
     """Return descriptive statistics for the uploaded dataset."""
+
+    logger.info({
+        "event": "stats_requested",
+        "client_ip": request.client.host,
+        "user_agent": request.headers.get("User-Agent", "unknown")
+    })
+
     try:
         stats = data_service.get_stats()
     except ValidationError as e:
         raise UserError(str(e))
+
+    logger.info({
+        "event": "stats_returned",
+        "client_ip": request.client.host
+    })
 
     return StatsResponse(stats=stats)
 
 
 @app.get("/data/download/csv")
 @limiter.limit("10/minute")
-def download_csv():
+def download_csv(request: Request):
     """Return the stored dataset as a downloadable CSV file."""
+
+    logger.info({
+        "event": "csv_download_requested",
+        "client_ip": request.client.host
+    })
+
     try:
         csv_bytes = data_service.get_csv()
     except ValidationError as e:
         raise UserError(str(e))
+
+    logger.info({
+        "event": "csv_download_success",
+        "client_ip": request.client.host,
+        "size_bytes": len(csv_bytes)
+    })
 
     return StreamingResponse(
         iter([csv_bytes]),
@@ -115,17 +169,31 @@ def download_csv():
     )
 
 
+
 @app.get("/data/download/parquet")
 @limiter.limit("10/minute")
-def download_parquet():
+def download_parquet(request: Request):
     """Return the stored dataset as a downloadable Parquet file."""
+
+    logger.info({
+        "event": "parquet_download_requested",
+        "client_ip": request.client.host
+    })
+
     try:
         parquet_bytes = data_service.get_parquet()
     except ValidationError as e:
         raise UserError(str(e))
+
+    logger.info({
+        "event": "parquet_download_success",
+        "client_ip": request.client.host,
+        "size_bytes": len(parquet_bytes)
+    })
 
     return StreamingResponse(
         iter([parquet_bytes]),
         media_type="application/octet-stream",
         headers={"Content-Disposition": "attachment; filename=dataset.parquet"}
     )
+

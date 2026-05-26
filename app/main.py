@@ -2,6 +2,10 @@ from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.responses import StreamingResponse
 from fastapi.exceptions import RequestValidationError
 from fastapi.concurrency import run_in_threadpool
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from fastapi.responses import JSONResponse
 
 
 from app.errors import (
@@ -22,6 +26,10 @@ from app.config import logger
 
 app = FastAPI()
 
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+
+
 # Register global exception handlers
 app.add_exception_handler(HTTPException, http_exception_handler)
 app.add_exception_handler(Exception, validation_exception_handler)
@@ -29,6 +37,17 @@ app.add_exception_handler(Exception, validation_exception_handler)
 app.add_exception_handler(ValidationError, validation_error_handler)
 app.add_exception_handler(UserError, user_error_handler)
 app.add_exception_handler(SystemError, system_error_handler)
+
+@app.exception_handler(RateLimitExceeded)
+def rate_limit_handler(request, exc):
+    return JSONResponse(
+        status_code=429,
+        content={
+            "error_type": "RateLimitExceeded",
+            "message": "Too many requests. Please slow down.",
+            "details": {"limit": str(exc.detail)}
+        }
+    )
 
 
 @app.get("/health")
@@ -38,6 +57,7 @@ def health_chech():
 
 
 @app.post("/data/upload", response_model=UploadResponse)
+@limiter.limit("5/minute")
 async def upload_data(file: UploadFile = File(...)):
     """Upload a CSV file, validate it asynchronously and store it in memory."""
 
@@ -68,6 +88,7 @@ async def upload_data(file: UploadFile = File(...)):
 
 
 @app.get("/data/stats", response_model=StatsResponse)
+@limiter.limit("20/minute")
 def get_stats():
     """Return descriptive statistics for the uploaded dataset."""
     try:
@@ -79,6 +100,7 @@ def get_stats():
 
 
 @app.get("/data/download/csv")
+@limiter.limit("10/minute")
 def download_csv():
     """Return the stored dataset as a downloadable CSV file."""
     try:
@@ -94,6 +116,7 @@ def download_csv():
 
 
 @app.get("/data/download/parquet")
+@limiter.limit("10/minute")
 def download_parquet():
     """Return the stored dataset as a downloadable Parquet file."""
     try:

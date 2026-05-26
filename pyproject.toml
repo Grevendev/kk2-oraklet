@@ -9,6 +9,7 @@ dependencies = [
     "pandas>=3.0.3",
     "pyarrow>=24.0.0",
     "pydantic>=2.13.4",
+    "slowapi>=0.1.9",
     "transformers>=5.9.0",
     "uvicorn>=0.48.0",
 ]

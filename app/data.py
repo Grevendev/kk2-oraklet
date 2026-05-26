@@ -113,7 +113,7 @@ data_service = DataService()
 # CSV validation
 # -----------------------------
 def validate_and_clean_csv(file_bytes: bytes) -> pd.DataFrame:
-    """Validate CSV content, enforce size limits, encoding, and clean column names."""
+    """Validate CSV content, enforce size limits, encoding, clean column names and auto-convert types."""
 
     MAX_SIZE_MB = 10
     MAX_COLUMNS = 100
@@ -147,27 +147,66 @@ def validate_and_clean_csv(file_bytes: bytes) -> pd.DataFrame:
     df = df.dropna(axis=1, how="all")
 
     # -----------------------------
-    # ANALYSBARHETS-VALIDERING
+    # AUTOMATIC TYPE CONVERSION
     # -----------------------------
 
-    # 1. Dataset must have at least one row
+    # 1. Convert percentage strings to floats
+    for col in df.columns:
+        if df[col].dtype == object and df[col].astype(str).str.endswith("%").any():
+            df[col] = (
+                df[col]
+                .astype(str)
+                .str.replace("%", "", regex=False)
+                .str.replace(",", ".", regex=False)
+            )
+            df[col] = pd.to_numeric(df[col], errors="coerce") / 100
+
+    # 2. Convert numeric strings (including Swedish decimals)
+    for col in df.columns:
+        if df[col].dtype == object:
+            df[col] = (
+                df[col]
+                .astype(str)
+                .str.replace(",", ".", regex=False)  # Swedish decimal comma
+                .str.replace(" ", "", regex=False)   # Remove thousand separators
+            )
+            df[col] = pd.to_numeric(df[col], errors="ignore")
+
+    # 3. Convert boolean-like strings
+    BOOL_TRUE = {"true", "yes", "1", "y", "ja"}
+    BOOL_FALSE = {"false", "no", "0", "n", "nej"}
+
+    for col in df.columns:
+        if df[col].dtype == object:
+            lowered = df[col].astype(str).str.lower()
+            if lowered.isin(BOOL_TRUE | BOOL_FALSE).any():
+                df[col] = lowered.map(
+                    lambda x: True if x in BOOL_TRUE else False if x in BOOL_FALSE else None
+                )
+
+    # 4. Convert date-like strings
+    for col in df.columns:
+        if df[col].dtype == object:
+            df[col] = pd.to_datetime(df[col], errors="ignore")
+
+    # -----------------------------
+    # ANALYSIS READINESS VALIDATION
+    # -----------------------------
+
     if df.shape[0] < 1:
         raise ValidationError("Dataset must contain at least one data row.")
 
-    # 2. Dataset must not be too wide
     if df.shape[1] > MAX_COLUMNS:
         raise ValidationError(
             f"Dataset has {df.shape[1]} columns, exceeding the limit of {MAX_COLUMNS}."
         )
 
-    # 3. Must contain at least one numeric column
     numeric_cols = df.select_dtypes(include=["number"]).columns
     if len(numeric_cols) < MIN_NUMERIC_COLUMNS:
         raise ValidationError(
             "Dataset must contain at least one numeric column for analysis."
         )
 
-    # 4. Detect ID-like columns (100% unique)
     id_like_columns = [
         col for col in df.columns if df[col].nunique() == df.shape[0]
     ]
@@ -178,7 +217,6 @@ def validate_and_clean_csv(file_bytes: bytes) -> pd.DataFrame:
             "At least one column must contain repeated or aggregatable values."
         )
 
-    # 5. Detect columns with all nulls
     null_columns = [col for col in df.columns if df[col].isna().all()]
     if null_columns:
         raise ValidationError(

@@ -6,6 +6,9 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import Response
 
 
 from app.errors import (
@@ -26,8 +29,40 @@ from app.config import logger
 
 app = FastAPI()
 
+# -----------------------------------
+# CORS POLICY
+# -----------------------------------
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Byt till specifika domäner i produktion
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
 limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
+
+
+# -----------------------------------
+# SECURITY HEADERS
+# -----------------------------------
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        response: Response = await call_next(request)
+
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["Referrer-Policy"] = "no-referrer"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Permissions-Policy"] = (
+            "geolocation=(), microphone=(), camera=()"
+        )
+
+        return response
+
+app.add_middleware(SecurityHeadersMiddleware)
 
 
 # Register global exception handlers

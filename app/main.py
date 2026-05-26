@@ -13,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
 from starlette.middleware.compression import CompressionMiddleware
+from starlette.middleware.timeout import TimeoutMiddleware
 
 from app.errors import (
     http_exception_handler,
@@ -105,6 +106,15 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
 
 app.add_middleware(RequestIDMiddleware)
 
+# -----------------------------------
+# REQUEST TIMEOUT PROTECTION
+# -----------------------------------
+app.add_middleware(
+    TimeoutMiddleware,
+    timeout=10  # 10 sekunder per request
+)
+
+
 
 # -----------------------------------
 # RESPONSE COMPRESSION (Brotli + GZip)
@@ -138,6 +148,24 @@ def rate_limit_handler(request, exc):
             "error_type": "RateLimitExceeded",
             "message": "Too many requests. Please slow down.",
             "details": {"limit": str(exc.detail)}
+        }
+    )
+
+@app.exception_handler(TimeoutError)
+def timeout_handler(request: Request, exc: TimeoutError):
+    logger.warning({
+        "event": "request_timeout",
+        "request_id": request.state.request_id,
+        "client_ip": request.client.host,
+        "path": request.url.path
+    })
+
+    return JSONResponse(
+        status_code=504,
+        content={
+            "error_type": "RequestTimeout",
+            "message": "The request took too long to process.",
+            "request_id": request.state.request_id
         }
     )
 

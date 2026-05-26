@@ -142,7 +142,33 @@ def validate_and_clean_csv(file_bytes: bytes) -> pd.DataFrame:
         safe_columns.append(col)
 
     df.columns = safe_columns
+    # -----------------------------------
+    # MEMORY USAGE GUARD — STEP 2
+    # -----------------------------------
+    max_rows = 5_000_000
+    max_columns = 200
+    max_memory_bytes = 500 * 1024 * 1024  # 500 MB
 
+    df_memory = df.memory_usage(deep=True).sum()
+
+    if df.shape[0] > max_rows:
+        raise ValidationError(f"Dataset has too many rows ({df.shape[0]}). Max allowed is {max_rows}.")
+
+    if df.shape[1] > max_columns:
+        raise ValidationError(f"Dataset has too many columns ({df.shape[1]}). Max allowed is {max_columns}.")
+
+    if df_memory > max_memory_bytes:
+        raise ValidationError(f"Dataset uses too much memory ({df_memory} bytes). Max allowed is {max_memory_bytes}.")
+
+    logger.warning({
+        "event": "memory_guard_triggered",
+        "reason": "too_many_rows/columns/memory" if (
+            df.shape[0] > max_rows or df.shape[1] > max_columns or df_memory > max_memory_bytes
+        ) else "passed",
+        "rows": df.shape[0],
+        "columns": df.shape[1],
+        "memory_bytes": df_memory
+    })
 
     # -----------------------------------
     # AUTOMATIC TYPE CONVERSION (unchanged)

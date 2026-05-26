@@ -187,9 +187,30 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
     if not file.filename.endswith(".csv"):
         raise ValidationError("File must be a CSV.")
 
+    # Read file asynchronously
     file_bytes = await file.read()
     file_size = len(file_bytes)
 
+    # -----------------------------------
+    # MEMORY USAGE GUARD — STEP 1
+    # -----------------------------------
+    MAX_UPLOAD_SIZE = 50 * 1024 * 1024  # 50 MB
+
+    if file_size > MAX_UPLOAD_SIZE:
+        logger.warning({
+            "event": "upload_too_large",
+            "request_id": request.state.request_id,
+            "filename": file.filename,
+            "file_size_bytes": file_size,
+            "max_allowed_bytes": MAX_UPLOAD_SIZE,
+            "client_ip": request.client.host
+        })
+        raise UserError(
+            f"Uploaded file is too large ({file_size} bytes). "
+            f"Max allowed size is {MAX_UPLOAD_SIZE} bytes."
+        )
+
+    # Audit log: upload attempt
     logger.info({
         "event": "csv_upload_attempt",
         "request_id": request.state.request_id,
@@ -236,6 +257,7 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
         columns=list(df.columns),
         dtypes={col: str(dtype) for col, dtype in df.dtypes.items()}
     )
+
 
 
 # -----------------------------------

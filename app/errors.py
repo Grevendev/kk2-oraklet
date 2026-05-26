@@ -45,3 +45,39 @@ async def validation_exception_handler(request: Request, exc: Exception):
             details={"error": str(exc)}
         ).dict()
     )
+
+
+async def validation_error_handler(request: Request, exc: ValidationError):
+    """Handle semantic validation errors (422)."""
+    return JSONResponse(
+        status_code=422,
+        content=ErrorResponse(
+            error_type="ValidationError",
+            message=str(exc),
+            details={"path": request.url.path}
+        ).dict()
+    )
+
+
+async def user_error_handler(request: Request, exc: UserError):
+    """Handle user mistakes (400)."""
+    return JSONResponse(
+        status_code=400,
+        content=ErrorResponse(
+            error_type="UserError",
+            message=str(exc),
+            details={"path": request.url.path}
+        ).dict()
+    )
+
+
+async def system_error_handler(request: Request, exc: SystemError):
+    """Handle internal server errors (500)."""
+    return JSONResponse(
+        status_code=500,
+        content=ErrorResponse(
+            error_type="SystemError",
+            message="Internal server error.",
+            details={"error": str(exc)}
+        ).dict()
+    )

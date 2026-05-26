@@ -1,4 +1,6 @@
 import uuid
+import time
+from collections import deque
 
 from fastapi import FastAPI, UploadFile, File, HTTPException, Request
 from fastapi.responses import StreamingResponse, JSONResponse
@@ -14,9 +16,6 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
 from starlette.middleware.compression import CompressionMiddleware
 from starlette.middleware.timeout import TimeoutMiddleware
-
-from collections import deque
-import time
 
 from app.errors import (
     http_exception_handler,
@@ -36,16 +35,21 @@ from app.config import logger
 
 app = FastAPI()
 
-from collections import deque
-import time
-
 # -----------------------------------
 # GLOBAL RATE ANOMALY TRACKER
 # -----------------------------------
 REQUEST_WINDOW_SECONDS = 10
-MAX_REQUESTS_IN_WINDOW = 200  # t.ex. 200 requests på 10 sekunder
-
+MAX_REQUESTS_IN_WINDOW = 200
 recent_requests = deque()
+
+# -----------------------------------
+# CIRCUIT BREAKER STATE
+# -----------------------------------
+circuit_open_until = 0
+validation_failures = []
+VALIDATION_WINDOW_SECONDS = 30
+MAX_VALIDATION_FAILURES = 10
+CIRCUIT_BREAKER_DURATION = 30
 
 
 # -----------------------------------
@@ -65,8 +69,6 @@ async def on_shutdown():
         "event": "server_shutdown",
         "message": "API is shutting down gracefully"
     })
-
-    # Cleanup: clear dataset and stats cache
     data_service.clear()
 
 
@@ -75,7 +77,7 @@ async def on_shutdown():
 # -----------------------------------
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Byt till specifika domäner i produktion
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -121,6 +123,7 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
 
 app.add_middleware(RequestIDMiddleware)
 
+
 # -----------------------------------
 # GLOBAL RATE ANOMALY DETECTION
 # -----------------------------------
@@ -128,14 +131,11 @@ class GlobalRateAnomalyMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         now = time.time()
 
-        # Lägg till timestamp
         recent_requests.append(now)
 
-        # Ta bort gamla timestamps
         while recent_requests and recent_requests[0] < now - REQUEST_WINDOW_SECONDS:
             recent_requests.popleft()
 
-        # Kontrollera om vi är över gränsen
         if len(recent_requests) > MAX_REQUESTS_IN_WINDOW:
             logger.warning({
                 "event": "global_rate_anomaly_detected",
@@ -156,7 +156,38 @@ class GlobalRateAnomalyMiddleware(BaseHTTPMiddleware):
 
         return await call_next(request)
 
+
 app.add_middleware(GlobalRateAnomalyMiddleware)
+
+
+# -----------------------------------
+# CIRCUIT BREAKER MIDDLEWARE
+# -----------------------------------
+class CircuitBreakerMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        now = time.time()
+
+        if now < circuit_open_until and request.url.path.startswith("/data/upload"):
+            logger.warning({
+                "event": "circuit_breaker_blocked_request",
+                "request_id": request.state.request_id,
+                "client_ip": request.client.host,
+                "blocked_until": circuit_open_until
+            })
+            return JSONResponse(
+                status_code=503,
+                content={
+                    "error_type": "CircuitBreakerOpen",
+                    "message": "Service temporarily unavailable due to repeated validation failures.",
+                    "retry_after_seconds": int(circuit_open_until - now),
+                    "request_id": request.state.request_id
+                }
+            )
+
+        return await call_next(request)
+
+
+app.add_middleware(CircuitBreakerMiddleware)
 
 
 # -----------------------------------
@@ -164,13 +195,12 @@ app.add_middleware(GlobalRateAnomalyMiddleware)
 # -----------------------------------
 app.add_middleware(
     TimeoutMiddleware,
-    timeout=10  # 10 sekunder per request
+    timeout=10
 )
 
 
-
 # -----------------------------------
-# RESPONSE COMPRESSION (Brotli + GZip)
+# RESPONSE COMPRESSION
 # -----------------------------------
 app.add_middleware(
     CompressionMiddleware,
@@ -203,6 +233,7 @@ def rate_limit_handler(request, exc):
             "details": {"limit": str(exc.detail)}
         }
     )
+
 
 @app.exception_handler(TimeoutError)
 def timeout_handler(request: Request, exc: TimeoutError):
@@ -240,14 +271,10 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
     if not file.filename.endswith(".csv"):
         raise ValidationError("File must be a CSV.")
 
-    # Read file asynchronously
     file_bytes = await file.read()
     file_size = len(file_bytes)
 
-    # -----------------------------------
-    # MEMORY USAGE GUARD — STEP 1
-    # -----------------------------------
-    MAX_UPLOAD_SIZE = 50 * 1024 * 1024  # 50 MB
+    MAX_UPLOAD_SIZE = 50 * 1024 * 1024
 
     if file_size > MAX_UPLOAD_SIZE:
         logger.warning({
@@ -263,7 +290,6 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
             f"Max allowed size is {MAX_UPLOAD_SIZE} bytes."
         )
 
-    # Audit log: upload attempt
     logger.info({
         "event": "csv_upload_attempt",
         "request_id": request.state.request_id,
@@ -275,7 +301,25 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
 
     try:
         df = await run_in_threadpool(validate_and_clean_csv, file_bytes)
+
     except ValidationError as e:
+        now = time.time()
+        validation_failures.append(now)
+
+        while validation_failures and validation_failures[0] < now - VALIDATION_WINDOW_SECONDS:
+            validation_failures.pop(0)
+
+        if len(validation_failures) >= MAX_VALIDATION_FAILURES:
+            global circuit_open_until
+            circuit_open_until = now + CIRCUIT_BREAKER_DURATION
+
+            logger.error({
+                "event": "circuit_breaker_opened",
+                "request_id": request.state.request_id,
+                "failures_last_30s": len(validation_failures),
+                "open_until": circuit_open_until
+            })
+
         logger.warning({
             "event": "csv_upload_validation_failed",
             "request_id": request.state.request_id,
@@ -283,7 +327,9 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
             "reason": str(e),
             "client_ip": request.client.host
         })
+
         raise e
+
     except Exception as e:
         logger.error({
             "event": "csv_upload_unexpected_error",
@@ -310,7 +356,6 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
         columns=list(df.columns),
         dtypes={col: str(dtype) for col, dtype in df.dtypes.items()}
     )
-
 
 
 # -----------------------------------

@@ -207,6 +207,44 @@ def validate_and_clean_csv(file_bytes: bytes) -> pd.DataFrame:
     # Drop fully empty columns
     df = df.dropna(axis=1, how="all")
 
+        # -----------------------------------
+    # INPUT SANITIZATION
+    # -----------------------------------
+
+    # 1. Remove dangerous Unicode characters
+    dangerous_unicode = [
+        "\u202E",  # RTL override
+        "\u202D",  # LTR override
+        "\u2066", "\u2067", "\u2068", "\u2069",  # directional isolates
+        "\u200B", "\u200C", "\u200D",  # zero-width spaces
+    ]
+
+    for col in df.columns:
+        for char in dangerous_unicode:
+            df[col] = df[col].astype(str).str.replace(char, "", regex=False)
+
+    # 2. Remove null bytes and control characters
+    df = df.replace({r"[\x00-\x1F\x7F]": ""}, regex=True)
+
+    # 3. Prevent Excel formula injection
+    # If a cell starts with =, +, -, @ → prefix with '
+    def escape_excel_formula(value):
+        if isinstance(value, str) and value.startswith(("=", "+", "-", "@")):
+            return "'" + value
+        return value
+
+    df = df.applymap(escape_excel_formula)
+
+    # 4. Sanitize column names (no formulas, no control chars)
+    safe_columns = []
+    for col in df.columns:
+        col = col.replace("=", "").replace("+", "").replace("-", "").replace("@", "")
+        col = "".join(ch for ch in col if ch.isprintable())
+        safe_columns.append(col)
+
+    df.columns = safe_columns
+
+
     # -----------------------------------
     # AUTOMATIC TYPE CONVERSION (unchanged)
     # -----------------------------------

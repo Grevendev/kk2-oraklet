@@ -160,7 +160,8 @@ data_service = DataService()
 # CSV validation
 # -----------------------------
 def validate_and_clean_csv(file_bytes: bytes) -> pd.DataFrame:
-    """Validate CSV content, enforce size limits, encoding, clean column names and auto-convert types."""
+    """Validate CSV content, enforce size limits, encoding, clean column names,
+    auto-detect delimiter and auto-convert types."""
 
     MAX_SIZE_MB = 10
     MAX_COLUMNS = 100
@@ -171,11 +172,24 @@ def validate_and_clean_csv(file_bytes: bytes) -> pd.DataFrame:
     if size_mb > MAX_SIZE_MB:
         raise ValidationError(f"File exceeds maximum allowed size of {MAX_SIZE_MB} MB.")
 
+    # -----------------------------------
+    # AUTO-DETECT DELIMITER
+    # -----------------------------------
+    sample = file_bytes[:2048].decode("utf-8", errors="ignore")
+
+    delimiter = ","
+    if sample.count(";") > sample.count(","):
+        delimiter = ";"
+    elif sample.count("\t") > sample.count(","):
+        delimiter = "\t"
+
+    logger.info(f"Detected delimiter: '{delimiter}'")
+
     # Try reading with UTF-8 first, fallback to latin-1
     try:
-        df = pd.read_csv(pd.io.common.BytesIO(file_bytes), encoding="utf-8")
+        df = pd.read_csv(pd.io.common.BytesIO(file_bytes), encoding="utf-8", delimiter=delimiter)
     except UnicodeDecodeError:
-        df = pd.read_csv(pd.io.common.BytesIO(file_bytes), encoding="latin-1")
+        df = pd.read_csv(pd.io.common.BytesIO(file_bytes), encoding="latin-1", delimiter=delimiter)
 
     if df.empty:
         raise ValidationError("CSV file is empty or contains no rows.")
@@ -193,9 +207,9 @@ def validate_and_clean_csv(file_bytes: bytes) -> pd.DataFrame:
     # Drop fully empty columns
     df = df.dropna(axis=1, how="all")
 
-    # -----------------------------
-    # AUTOMATIC TYPE CONVERSION
-    # -----------------------------
+    # -----------------------------------
+    # AUTOMATIC TYPE CONVERSION (unchanged)
+    # -----------------------------------
 
     # 1. Convert percentage strings to floats
     for col in df.columns:
@@ -214,8 +228,8 @@ def validate_and_clean_csv(file_bytes: bytes) -> pd.DataFrame:
             df[col] = (
                 df[col]
                 .astype(str)
-                .str.replace(",", ".", regex=False)  # Swedish decimal comma
-                .str.replace(" ", "", regex=False)   # Remove thousand separators
+                .str.replace(",", ".", regex=False)
+                .str.replace(" ", "", regex=False)
             )
             df[col] = pd.to_numeric(df[col], errors="ignore")
 
@@ -236,9 +250,9 @@ def validate_and_clean_csv(file_bytes: bytes) -> pd.DataFrame:
         if df[col].dtype == object:
             df[col] = pd.to_datetime(df[col], errors="ignore")
 
-    # -----------------------------
-    # ANALYSIS READINESS VALIDATION
-    # -----------------------------
+    # -----------------------------------
+    # ANALYSIS READINESS VALIDATION (unchanged)
+    # -----------------------------------
 
     if df.shape[0] < 1:
         raise ValidationError("Dataset must contain at least one data row.")

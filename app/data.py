@@ -3,6 +3,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 from typing import Optional
 from app.config import logger
+from app.errors import ValidationError  # <-- viktigt
 
 
 class DataService:
@@ -35,25 +36,25 @@ class DataService:
     def get_dataset(self) -> pd.DataFrame:
         """Return the stored DataFrame."""
         if self._df is None:
-            raise ValueError("No dataset has been uploaded yet.")
+            raise ValidationError("No dataset has been uploaded yet.")
         return self._df
 
     def get_parquet(self) -> bytes:
         """Return the stored Parquet bytes."""
         if self._parquet_bytes is None:
-            raise ValueError("No dataset has been uploaded yet.")
+            raise ValidationError("No dataset has been uploaded yet.")
         return self._parquet_bytes
 
     def get_csv(self) -> bytes:
         """Return the dataset as CSV bytes."""
         if self._df is None:
-            raise ValueError("No dataset has been uploaded yet.")
+            raise ValidationError("No dataset has been uploaded yet.")
         return self._df.to_csv(index=False).encode("utf-8")
 
     def get_stats(self) -> dict:
         """Return cached or newly computed descriptive statistics."""
         if self._df is None:
-            raise ValueError("No dataset has been uploaded yet.")
+            raise ValidationError("No dataset has been uploaded yet.")
 
         if self._stats_cache is None:
             self._stats_cache = self._df.describe(include="all").to_dict()
@@ -72,7 +73,7 @@ def validate_and_clean_csv(file_bytes: bytes) -> pd.DataFrame:
     size_mb = len(file_bytes) / (1024 * 1024)
 
     if size_mb > MAX_SIZE_MB:
-        raise ValueError(f"File exceeds maximum allowed size of {MAX_SIZE_MB} MB.")
+        raise ValidationError(f"File exceeds maximum allowed size of {MAX_SIZE_MB} MB.")
 
     # Try reading with UTF-8 first, fallback to latin-1
     try:
@@ -81,14 +82,14 @@ def validate_and_clean_csv(file_bytes: bytes) -> pd.DataFrame:
         df = pd.read_csv(pd.io.common.BytesIO(file_bytes), encoding="latin-1")
 
     if df.empty:
-        raise ValueError("CSV file is empty or contains no rows.")
+        raise ValidationError("CSV file is empty or contains no rows.")
 
     # Clean column names
     cleaned_columns = []
     for col in df.columns:
         new_col = str(col).strip()
         if new_col == "" or new_col.lower().startswith("unnamed"):
-            raise ValueError(f"Invalid column name detected: '{col}'")
+            raise ValidationError(f"Invalid column name detected: '{col}'")
         cleaned_columns.append(new_col)
 
     df.columns = cleaned_columns

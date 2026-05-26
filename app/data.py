@@ -77,7 +77,7 @@ class DataService:
         return age < timedelta(seconds=self.STATS_TTL_SECONDS)
 
     def get_stats(self) -> dict:
-        """Return cached or newly computed descriptive statistics."""
+        """Return cached or newly computed descriptive statistics with column profiling."""
         if self._df is None:
             raise ValidationError("No dataset has been uploaded yet.")
 
@@ -86,14 +86,60 @@ class DataService:
             logger.info("Returning cached statistics.")
             return self._stats_cache
 
-        # Compute new stats
         logger.info("Computing new statistics.")
-        stats = self._df.describe(include="all").to_dict()
+        df = self._df
 
-        # Add metadata
+        # Base descriptive statistics
+        stats = df.describe(include="all").to_dict()
+
+        # -----------------------------
+        # COLUMN PROFILING
+        # -----------------------------
+        profiling = {}
+
+        for col in df.columns:
+            series = df[col]
+
+            profiling[col] = {
+                "dtype": str(series.dtype),
+                "unique_values": int(series.nunique()),
+                "null_count": int(series.isna().sum()),
+                "null_percentage": float((series.isna().mean() * 100)),
+            }
+
+            # Numeric profiling
+            if pd.api.types.is_numeric_dtype(series):
+                profiling[col]["min"] = float(series.min())
+                profiling[col]["max"] = float(series.max())
+                profiling[col]["mean"] = float(series.mean())
+                profiling[col]["distribution_type"] = "numeric"
+
+            # Datetime profiling
+            elif pd.api.types.is_datetime64_any_dtype(series):
+                profiling[col]["min"] = str(series.min())
+                profiling[col]["max"] = str(series.max())
+                profiling[col]["distribution_type"] = "datetime"
+
+            # Boolean profiling
+            elif pd.api.types.is_bool_dtype(series):
+                profiling[col]["true_count"] = int(series.sum())
+                profiling[col]["false_count"] = int((~series).sum())
+                profiling[col]["distribution_type"] = "boolean"
+
+            # String profiling
+            else:
+                profiling[col]["avg_string_length"] = float(
+                    series.astype(str).str.len().mean()
+                )
+                profiling[col]["distribution_type"] = "categorical"
+
+        # Attach profiling to stats
+        stats["_column_profile"] = profiling
+
+        # Metadata
         stats["_metadata"] = {
-            "rows": self._df.shape[0],
-            "columns": self._df.shape[1],
+            "rows": df.shape[0],
+            "columns": df.shape[1],
             "generated_at": datetime.utcnow().isoformat(),
             "cache_ttl_seconds": self.STATS_TTL_SECONDS,
         }
@@ -103,6 +149,7 @@ class DataService:
         self._stats_timestamp = datetime.utcnow()
 
         return stats
+    
 
 
 # Singleton instance

@@ -3,6 +3,21 @@ from fastapi.responses import JSONResponse
 from app.schemas import ErrorResponse
 from app.config import logger
 
+class ValidationError(Exception):
+    """Raised when user input is syntactically correct but semantically invalid."""
+    pass
+
+
+class UserError(Exception):
+    """Raised when the user performs an invalid action (e.g., requesting stats before upload)."""
+    pass
+
+
+class SystemError(Exception):
+    """Raised when an unexpected internal error occurs."""
+    pass
+
+
 
 async def http_exception_handler(request: Request, exc: HTTPException):
     """Handle FastAPI HTTPExceptions with a standardized error model."""

@@ -33,6 +33,28 @@ from app.config import logger
 app = FastAPI()
 
 # -----------------------------------
+# STARTUP & SHUTDOWN EVENTS
+# -----------------------------------
+@app.on_event("startup")
+async def on_startup():
+    logger.info({
+        "event": "server_startup",
+        "message": "API is starting up"
+    })
+
+
+@app.on_event("shutdown")
+async def on_shutdown():
+    logger.info({
+        "event": "server_shutdown",
+        "message": "API is shutting down gracefully"
+    })
+
+    # Cleanup: clear dataset and stats cache
+    data_service.clear()
+
+
+# -----------------------------------
 # CORS POLICY
 # -----------------------------------
 app.add_middleware(

@@ -28,134 +28,31 @@ class DataService:
         self._stats_timestamp: Optional[datetime] = None
 
     # -----------------------------
-    # Dataset storage
+    # Cleanup
     # -----------------------------
-    def set_dataset(self, df: pd.DataFrame) -> None:
-        """Store the cleaned dataset and generate Parquet bytes."""
-        self._df = df
-
-        # Reset stats cache
+    def clear(self):
+        self._df = None
+        self._parquet_bytes = None
         self._stats_cache = None
         self._stats_timestamp = None
 
-        # Convert DataFrame to Parquet bytes
-        table = pa.Table.from_pandas(df)
-        sink = pa.BufferOutputStream()
-        pq.write_table(table, sink)
-        self._parquet_bytes = sink.getvalue().to_pybytes()
-
-        logger.info(
-            f"Dataset stored: {df.shape[0]} rows, {df.shape[1]} columns, "
-            f"Parquet size: {len(self._parquet_bytes)} bytes."
-        )
-
     # -----------------------------
-    # Dataset access
+    # ETag generation
     # -----------------------------
-    def get_dataset(self) -> pd.DataFrame:
-        if self._df is None:
-            raise ValidationError("No dataset has been uploaded yet.")
-        return self._df
+    def get_stats_etag(self) -> str:
+        """Return a stable ETag hash for the current stats cache."""
+        if self._stats_cache is None:
+            return ""
 
-    def get_parquet(self) -> bytes:
-        if self._parquet_bytes is None:
-            raise ValidationError("No dataset has been uploaded yet.")
-        return self._parquet_bytes
-
-    def get_csv(self) -> bytes:
-        if self._df is None:
-            raise ValidationError("No dataset has been uploaded yet.")
-        return self._df.to_csv(index=False).encode("utf-8")
-
-    # -----------------------------
-    # Stats with caching
-    # -----------------------------
-    def _is_stats_cache_valid(self) -> bool:
-        """Check if cached stats are still valid based on TTL."""
-        if self._stats_cache is None or self._stats_timestamp is None:
-            return False
-
-        age = datetime.utcnow() - self._stats_timestamp
-        return age < timedelta(seconds=self.STATS_TTL_SECONDS)
-
-    def get_stats(self) -> dict:
-        """Return cached or newly computed descriptive statistics with column profiling."""
-        if self._df is None:
-            raise ValidationError("No dataset has been uploaded yet.")
-
-        # Return cached stats if valid
-        if self._is_stats_cache_valid():
-            logger.info("Returning cached statistics.")
-            return self._stats_cache
-
-        logger.info("Computing new statistics.")
-        df = self._df
-
-        # Base descriptive statistics
-        stats = df.describe(include="all").to_dict()
-
-        # -----------------------------
-        # COLUMN PROFILING
-        # -----------------------------
-        profiling = {}
-
-        for col in df.columns:
-            series = df[col]
-
-            profiling[col] = {
-                "dtype": str(series.dtype),
-                "unique_values": int(series.nunique()),
-                "null_count": int(series.isna().sum()),
-                "null_percentage": float((series.isna().mean() * 100)),
-            }
-
-            # Numeric profiling
-            if pd.api.types.is_numeric_dtype(series):
-                profiling[col]["min"] = float(series.min())
-                profiling[col]["max"] = float(series.max())
-                profiling[col]["mean"] = float(series.mean())
-                profiling[col]["distribution_type"] = "numeric"
-
-            # Datetime profiling
-            elif pd.api.types.is_datetime64_any_dtype(series):
-                profiling[col]["min"] = str(series.min())
-                profiling[col]["max"] = str(series.max())
-                profiling[col]["distribution_type"] = "datetime"
-
-            # Boolean profiling
-            elif pd.api.types.is_bool_dtype(series):
-                profiling[col]["true_count"] = int(series.sum())
-                profiling[col]["false_count"] = int((~series).sum())
-                profiling[col]["distribution_type"] = "boolean"
-
-            # String profiling
-            else:
-                profiling[col]["avg_string_length"] = float(
-                    series.astype(str).str.len().mean()
-                )
-                profiling[col]["distribution_type"] = "categorical"
-
-        # Attach profiling to stats
-        stats["_column_profile"] = profiling
-
-        # Metadata
-        stats["_metadata"] = {
-            "rows": df.shape[0],
-            "columns": df.shape[1],
-            "generated_at": datetime.utcnow().isoformat(),
-            "cache_ttl_seconds": self.STATS_TTL_SECONDS,
+        payload = {
+            "rows": self._stats_cache["_metadata"]["rows"],
+            "columns": self._stats_cache["_metadata"]["columns"],
+            "generated_at": self._stats_cache["_metadata"]["generated_at"],
         }
 
-        # Store in cache
-        self._stats_cache = stats
-        self._stats_timestamp = datetime.utcnow()
+        raw = json.dumps(payload, sort_keys=True).encode("utf-8")
+        return hashlib.sha256(raw).hexdigest()
 
-        return stats
-    
-
-
-# Singleton instance
-data_service = DataService()
 
 
 # -----------------------------

@@ -270,3 +270,6 @@ def validate_and_clean_csv(file_bytes: bytes) -> pd.DataFrame:
         raise ValidationError(f"Dataset contains columns with only null values: {null_columns}")
 
     return df
+
+# Global service instance
+data_service = DataService()

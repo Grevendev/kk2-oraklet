@@ -52,3 +52,7 @@ MODEL_NAME = "HuggingFaceTB/SmolLM2-135M-Instruct"
 
 # Maximum allowed time (in seconds) for the model to generate a response
 LLM_TIMEOUT_SECONDS = 20
+
+
+# Maximum allowed prompt length (characters)
+MAX_PROMPT_LENGTH = 8000

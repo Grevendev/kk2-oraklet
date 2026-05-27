@@ -17,6 +17,7 @@ from pydantic import BaseModel
 
 from app.chain.runnable import Runnable
 from app.config import SYSTEM_PROMPT, logger
+from app.config import MAX_PROMPT_LENGTH
 
 
 # ============================================================
@@ -79,6 +80,18 @@ class PromptBuilder(Runnable[PromptBuilderInput, PromptBuilderOutput]):
             f"User question: {input.question}\n"
             f"Answer in clear and concise Swedish."
         )
+
+        # Prevent oversized promts
+        if len(full_prompt) > MAX_PROMPT_LENGTH:
+            logger.warning(
+                "PromptBuilder aborted: prompt lenght %s exceeds limit %s",
+                len(full_prompt),
+                MAX_PROMPT_LENGTH
+            )
+            raise ValueError(
+                f"Prompt too long ({len(full_prompt)} chars)."
+                f"Maximum allowed is {MAX_PROMPT_LENGTH}."
+            )
 
         return PromptBuilderOutput(prompt=full_prompt)
 

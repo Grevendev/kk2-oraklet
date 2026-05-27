@@ -1,6 +1,7 @@
 import pandas as pd
 import pyarrow.parquet as pq
 import io
+import time
 
 from fastapi.testclient import TestClient
 from app.main import app

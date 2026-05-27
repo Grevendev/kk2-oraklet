@@ -10,6 +10,7 @@ dependencies = [
     "pandas>=3.0.3",
     "pyarrow>=24.0.0",
     "pydantic>=2.13.4",
+    "python-multipart>=0.0.29",
     "slowapi>=0.1.9",
     "starlette>=1.1.0",
     "transformers>=5.9.0",

@@ -3,7 +3,7 @@
 import hashlib
 from typing import Dict, Tuple, AsyncGenerator
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, StreamingResponse, Response
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
@@ -15,17 +15,18 @@ from app.state import state
 from app.chain.pipeline import pipeline
 from app.config import logger
 from app.errors import ValidationError, UserError, SystemError
+from app.schemas import AIResponse
 
 
 router = APIRouter(prefix="/ai", tags=["AI"])
 
-# SlowAPI limiter (same stil som i main.py)
+# SlowAPI limiter (same style as main.py)
 limiter = Limiter(key_func=get_remote_address)
 
 # Cache: (ip, question_hash, stats_hash) -> {"body": dict, "etag": str}
 _cache_store: Dict[Tuple[str, str, str], Dict[str, object]] = {}
 
-# Rate limit för AI
+# Rate limit for AI
 AI_RATE_LIMIT = "10/minute"
 
 
@@ -51,7 +52,7 @@ def _compute_etag(payload: dict) -> str:
 # /ai/ask – JSON + ETag + caching + async pipeline
 # ------------------------------------------------------------
 
-@router.post("/ask")
+@router.post("/ask", response_model=AIResponse)
 @limiter.limit(AI_RATE_LIMIT)
 async def ask_ai(request: Request, payload: AskRequest):
     """
@@ -91,6 +92,7 @@ async def ask_ai(request: Request, payload: AskRequest):
     cached = _cache_store.get(cache_key)
     if cached is not None:
         etag = cached["etag"]
+
         if client_etag == etag:
             logger.info({
                 "event": "ai_not_modified",
@@ -105,6 +107,7 @@ async def ask_ai(request: Request, payload: AskRequest):
             "request_id": request_id,
             "client_ip": client_ip
         })
+
         response = JSONResponse(content=cached["body"])
         response.headers["ETag"] = etag
         return response
@@ -132,8 +135,11 @@ async def ask_ai(request: Request, payload: AskRequest):
     result_dict = result.model_dump()
     etag = _compute_etag(result_dict)
 
+    # Validate against AIResponse schema
+    validated = AIResponse(**result_dict)
+
     # 7. Store in cache
-    _cache_store[cache_key] = {"body": result_dict, "etag": etag}
+    _cache_store[cache_key] = {"body": validated.model_dump(), "etag": etag}
 
     logger.info({
         "event": "ai_response_generated",
@@ -143,26 +149,25 @@ async def ask_ai(request: Request, payload: AskRequest):
     })
 
     # 8. Return JSON with ETag
-    response = JSONResponse(content=result_dict)
+    response = JSONResponse(content=validated.model_dump())
     response.headers["ETag"] = etag
     return response
 
 
 # ------------------------------------------------------------
-# /ai/ask/stream – streaming endpoint (chunkad text)
+# /ai/ask/stream – streaming endpoint (chunked text)
 # ------------------------------------------------------------
 
 @router.post("/ask/stream")
 @limiter.limit(AI_RATE_LIMIT)
 async def ask_ai_stream(request: Request, payload: AskRequest):
     """
-    Streaming variant av AI-endpointen.
+    Streaming variant of the AI endpoint.
 
-    Just nu:
-    - Kör samma pipeline i threadpool
-    - Streamar svaret i text-chunks
-    - Redo att bytas ut mot riktig token-streaming
-      när modellen byts till en som stödjer det.
+    Currently:
+    - Runs the same pipeline in threadpool
+    - Streams the answer in text chunks
+    - Ready for real token streaming when switching to a streaming-capable model
     """
 
     client_ip = request.client.host
@@ -199,24 +204,23 @@ async def ask_ai_stream(request: Request, payload: AskRequest):
         try:
             result = await run_in_threadpool(pipeline.run, payload.question)
         except ValidationError as e:
-            # Streaming + fel är knepigt; här förenklar vi:
-            msg = f"Validation error: {str(e)}"
-            yield msg.encode("utf-8")
+            yield f"Validation error: {str(e)}".encode("utf-8")
             return
         except TimeoutError as e:
-            msg = f"Timeout error: {str(e)}"
-            yield msg.encode("utf-8")
+            yield f"Timeout error: {str(e)}".encode("utf-8")
             return
         except RuntimeError as e:
-            msg = f"System error: {str(e)}"
-            yield msg.encode("utf-8")
+            yield f"System error: {str(e)}".encode("utf-8")
             return
 
         result_dict = result.model_dump()
         etag = _compute_etag(result_dict)
-        _cache_store[cache_key] = {"body": result_dict, "etag": etag}
 
-        answer = result_dict.get("answer", "")
+        # Validate and store
+        validated = AIResponse(**result_dict)
+        _cache_store[cache_key] = {"body": validated.model_dump(), "etag": etag}
+
+        answer = validated.answer
         for i in range(0, len(answer), 256):
             yield answer[i:i+256].encode("utf-8")
 

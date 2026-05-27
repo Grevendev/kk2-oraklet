@@ -19,3 +19,10 @@ class ErrorResponse(BaseModel):
     error_type: str
     message: str
     details: Optional[Dict[str, Any]] = None
+
+class AIResponse(BaseModel):
+    """Standardized response model for AI answers."""
+    question: str
+    answer: str
+    reasoning: str
+    stats_used: Dict[str, Any]

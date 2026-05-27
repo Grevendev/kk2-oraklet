@@ -503,3 +503,122 @@ def test_schema_drift_block_upload(monkeypatch):
     r2 = client.post("/data/upload", files={"file": ("data.csv", csv2)})
     assert r2.status_code == 400
     assert r2.json()["error_type"] == "UserError"
+
+# ============================================================
+# Whitespace columns
+# ============================================================
+
+def test_upload_whitespace_column_names():
+    """CSV with whitespace-only column names should return 422 ValidationError."""
+    csv = b"city,   \nMalmo,10"
+    response = client.post(
+        "/data/upload",
+        files={"file": ("bad.csv", csv)}
+    )
+    assert response.status_code == 422
+    assert response.json()["error_type"] == "ValidationError"
+
+
+# ============================================================
+# Duplicate columns
+# ============================================================
+
+def test_upload_duplicate_columns():
+    """CSV with duplicate column names should return 422 ValidationError."""
+    csv = b"city,city\nMalmo,10"
+    response = client.post(
+        "/data/upload",
+        files={"file": ("dup.csv", csv)}
+    )
+    assert response.status_code == 422
+    assert response.json()["error_type"] == "ValidationError"
+
+
+# ============================================================
+# Invalid datatypes
+# ============================================================
+
+def test_upload_invalid_datatypes():
+    """CSV with invalid datatypes should return 422 ValidationError."""
+    csv = b"city,temp\nMalmo,not_a_number"
+    response = client.post(
+        "/data/upload",
+        files={"file": ("badtype.csv", csv)}
+    )
+    assert response.status_code == 422
+    assert response.json()["error_type"] == "ValidationError"
+
+
+# ============================================================
+# NaN columns
+# ============================================================
+
+def test_upload_nan_column():
+    """CSV with NaN column names should return 422 ValidationError."""
+    csv = b"city,,temp\nMalmo,10,20"
+    response = client.post(
+        "/data/upload",
+        files={"file": ("nan.csv", csv)}
+    )
+    assert response.status_code == 422
+    assert response.json()["error_type"] == "ValidationError"
+
+
+# ============================================================
+# Empty column names
+# ============================================================
+
+def test_upload_empty_column_name():
+    """CSV with empty column name should return 422 ValidationError."""
+    csv = b",temp\nMalmo,10"
+    response = client.post(
+        "/data/upload",
+        files={"file": ("emptycol.csv", csv)}
+    )
+    assert response.status_code == 422
+    assert response.json()["error_type"] == "ValidationError"
+
+
+# ============================================================
+# Too many columns
+# ============================================================
+
+def test_upload_too_many_columns():
+    """CSV with more columns than allowed should return 422 ValidationError."""
+    csv = b"a,b,c,d,e,f,g,h,i,j,k\n1,2,3,4,5,6,7,8,9,10,11"
+    response = client.post(
+        "/data/upload",
+        files={"file": ("toomany.csv", csv)}
+    )
+    assert response.status_code == 422
+    assert response.json()["error_type"] == "ValidationError"
+
+
+# ============================================================
+# Unknown columns (if your validator enforces a known schema)
+# ============================================================
+
+def test_upload_unknown_columns():
+    """CSV with unknown columns should return 422 ValidationError."""
+    csv = b"city,temp,unknown_col\nMalmo,10,999"
+    response = client.post(
+        "/data/upload",
+        files={"file": ("unknown.csv", csv)}
+    )
+    assert response.status_code == 422
+    assert response.json()["error_type"] == "ValidationError"
+
+
+# ============================================================
+# Mixed datatypes in same column
+# ============================================================
+
+def test_upload_mixed_datatypes():
+    """CSV with mixed datatypes in the same column should return 422 ValidationError."""
+    csv = b"city,temp\nMalmo,10\nLund,not_a_number"
+    response = client.post(
+        "/data/upload",
+        files={"file": ("mixed.csv", csv)}
+    )
+    assert response.status_code == 422
+    assert response.json()["error_type"] == "ValidationError"

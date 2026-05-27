@@ -17,7 +17,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 
 from app.api.ai import router as ai_router
 
-app.include_router(ai_router)
+
 
 from app.errors import (
     http_exception_handler,
@@ -191,7 +191,7 @@ class CircuitBreakerMiddleware(BaseHTTPMiddleware):
 
 app.add_middleware(CircuitBreakerMiddleware)
 
-
+app.include_router(ai_router)
 # -----------------------------------
 # REQUEST TIMEOUT PROTECTION
 # -----------------------------------

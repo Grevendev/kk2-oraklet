@@ -1,16 +1,14 @@
 # app/chain/steps.py
 #
-# This file contains all Runnable steps used in the AI pipeline.
+# This file contains all steps used in the AI pipeline.
 # Implemented:
 #   - PromptBuilder (Step 1)
 #   - LLMRunner (Step 2)
 #   - ResponseParser (Step 3)
 
-
 from typing import Dict, Any
 from pydantic import BaseModel
 
-from app.chain.runnable import Runnable
 from app.config import (
     SYSTEM_PROMPT,
     logger,
@@ -41,10 +39,10 @@ class PromptBuilderOutput(BaseModel):
 
 
 # ============================================================
-# PromptBuilder — Step 1 in the Runnable chain
+# PromptBuilder — Step 1
 # ============================================================
 
-class PromptBuilder(Runnable[PromptBuilderInput, PromptBuilderOutput]):
+class PromptBuilder:
     """
     Builds a structured prompt for the LLM.
     """
@@ -100,10 +98,10 @@ class ResponseParserOutput(BaseModel):
 
 
 # ============================================================
-# LLMRunner — Step 2 in the Runnable chain
+# LLMRunner — Step 2
 # ============================================================
 
-class LLMRunner(Runnable[PromptBuilderOutput, LLMRunnerOutput]):
+class LLMRunner:
     """
     Executes the LLM using HuggingFace transformers.pipeline.
 
@@ -165,10 +163,10 @@ class LLMRunner(Runnable[PromptBuilderOutput, LLMRunnerOutput]):
 
 
 # ============================================================
-# ResponseParser — Step 3 in the Runnable chain
+# ResponseParser — Step 3
 # ============================================================
 
-class ResponseParser(Runnable[LLMRunnerOutput, ResponseParserOutput]):
+class ResponseParser:
     """
     Parses the raw LLM output into a structured response.
 
@@ -185,15 +183,13 @@ class ResponseParser(Runnable[LLMRunnerOutput, ResponseParserOutput]):
         raw = input.raw_output.strip()
 
         # Remove prompt echo if present
-        # Small models often repeat the prompt before answering
         cleaned = raw.split("User question:")[-1].strip()
 
         # Attempt to extract the actual answer
-        # If the model includes "Answer:" or similar, strip it
         if "Answer:" in cleaned:
             cleaned = cleaned.split("Answer:", 1)[-1].strip()
 
-        # Fallback: if cleaning fails, use raw text
+        # Fallback
         answer = cleaned if cleaned else raw
 
         return ResponseParserOutput(

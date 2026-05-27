@@ -4,8 +4,6 @@
 # Implemented:
 #   - PromptBuilder (Step 1)
 #   - LLMRunner (Step 2)
-#
-# Placeholder:
 #   - ResponseParser (Step 3)
 
 
@@ -120,10 +118,6 @@ class LLMRunner(Runnable[PromptBuilderOutput, LLMRunnerOutput]):
 
     @classmethod
     def _get_pipeline(cls):
-        """
-        Lazily initializes the model pipeline.
-        Ensures the model is only loaded once, even under concurrency.
-        """
         if cls._pipeline is None:
             with cls._pipeline_lock:
                 if cls._pipeline is None:
@@ -140,7 +134,6 @@ class LLMRunner(Runnable[PromptBuilderOutput, LLMRunnerOutput]):
 
         generator = self._get_pipeline()
 
-        # Function executed inside thread pool for timeout control
         def run_model():
             return generator(
                 input.prompt,
@@ -149,7 +142,6 @@ class LLMRunner(Runnable[PromptBuilderOutput, LLMRunnerOutput]):
                 do_sample=False
             )
 
-        # Timeout wrapper
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
             future = executor.submit(run_model)
 
@@ -164,7 +156,6 @@ class LLMRunner(Runnable[PromptBuilderOutput, LLMRunnerOutput]):
                 logger.error("LLMRunner failed: %s", str(e))
                 raise RuntimeError(f"LLM execution failed: {str(e)}")
 
-        # Extract raw text
         try:
             raw_text = result[0]["generated_text"]
         except Exception:
@@ -174,13 +165,39 @@ class LLMRunner(Runnable[PromptBuilderOutput, LLMRunnerOutput]):
 
 
 # ============================================================
-# Placeholder for ResponseParser — Step 3
+# ResponseParser — Step 3 in the Runnable chain
 # ============================================================
 
 class ResponseParser(Runnable[LLMRunnerOutput, ResponseParserOutput]):
     """
-    Placeholder implementation.
-    The real implementation will parse the model's raw output.
+    Parses the raw LLM output into a structured response.
+
+    Responsibilities:
+    - Extract the answer text from the model output
+    - Remove prompt echoes (common in small models)
+    - Clean whitespace and artifacts
+    - Return a typed ResponseParserOutput
     """
+
     def invoke(self, input: LLMRunnerOutput) -> ResponseParserOutput:
-        raise NotImplementedError("ResponseParser not implemented yet.")
+        logger.info("ResponseParser invoked")
+
+        raw = input.raw_output.strip()
+
+        # Remove prompt echo if present
+        # Small models often repeat the prompt before answering
+        cleaned = raw.split("User question:")[-1].strip()
+
+        # Attempt to extract the actual answer
+        # If the model includes "Answer:" or similar, strip it
+        if "Answer:" in cleaned:
+            cleaned = cleaned.split("Answer:", 1)[-1].strip()
+
+        # Fallback: if cleaning fails, use raw text
+        answer = cleaned if cleaned else raw
+
+        return ResponseParserOutput(
+            question="(unknown — will be filled by /ai/ask endpoint)",
+            answer=answer,
+            model=MODEL_NAME
+        )

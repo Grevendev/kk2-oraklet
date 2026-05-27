@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
+from app.chain.pipeline import pipeline
 
 from app.state import state # global in-memory state (stats cached here)
 from app.chain.steps import (
@@ -60,3 +61,13 @@ def ask_ai(request: AskRequest):
   parsed.question = request.question
 
   return parsed
+
+@router.post("/ask")
+def ask_ai(request: AskRequest):
+    if state.stats is None:
+        raise HTTPException(
+            status_code=400,
+            detail="No dataset uploaded. Upload data before asking questions."
+        )
+
+    return pipeline.run(request.question)

@@ -13,8 +13,8 @@ from slowapi.errors import RateLimitExceeded
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
-from starlette.middleware.compression import CompressionMiddleware
-from starlette.middleware.timeout import TimeoutMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
+
 
 from app.errors import (
     http_exception_handler,
@@ -97,7 +97,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response: Response = await call_next(request)
 
         response.headers["X-Frame-Options"] = "DENY"
-        response.headers["X-Content-Type-Options"] = "nosniff"]
+        response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "no-referrer"
         response.headers["X-XSS-Protection"] = "1; mode=block"
         response.headers["Permissions-Policy"] = (
@@ -192,21 +192,13 @@ app.add_middleware(CircuitBreakerMiddleware)
 # -----------------------------------
 # REQUEST TIMEOUT PROTECTION
 # -----------------------------------
-app.add_middleware(
-    TimeoutMiddleware,
-    timeout=10
-)
+
 
 
 # -----------------------------------
 # RESPONSE COMPRESSION
 # -----------------------------------
-app.add_middleware(
-    CompressionMiddleware,
-    minimum_size=500,
-    gzip=True,
-    brotli=True
-)
+app.add_middleware(GZipMiddleware, minimum_size=500)
 
 app.add_middleware(SecurityHeadersMiddleware)
 

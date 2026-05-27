@@ -1,17 +1,54 @@
-import logging 
+# app/config.py
+#
+# Central configuration for the Oraklet application.
+# Contains:
+#   - application-wide logging
+#   - system prompt for the LLM
+#   - model configuration
+#   - timeout settings for LLM calls
+#
+# This file ensures that all chain steps share the same configuration.
+
+
+import logging
+
+
+# ============================================================
+# Logging configuration
+# ============================================================
 
 # Configure application-wide logging
 logging.basicConfig(
-  level=logging.INFO,
-  format="%(asctime)s [%(levelname)s] %(message)s"
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s"
 )
 
-logger = logging.getLogger(__name__)
+# Create a named logger for the application
+logger = logging.getLogger("oraklet")
 
-# app/config.py
+
+# ============================================================
+# System prompt for the LLM
+# ============================================================
 
 SYSTEM_PROMPT = (
     "You are Oraklet, a helpful data analysis assistant. "
     "You answer questions strictly based on the dataset statistics provided. "
     "If the question cannot be answered from the data, say so clearly."
 )
+
+
+# ============================================================
+# Model configuration
+# ============================================================
+
+# HuggingFace model used by the LLMRunner
+MODEL_NAME = "HuggingFaceTB/SmolLM2-135M-Instruct"
+
+
+# ============================================================
+# Timeout configuration for LLM calls
+# ============================================================
+
+# Maximum allowed time (in seconds) for the model to generate a response
+LLM_TIMEOUT_SECONDS = 20

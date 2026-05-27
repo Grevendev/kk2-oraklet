@@ -1,53 +1,39 @@
 # app/api/ai.py
 
-import time
 import hashlib
-from typing import Dict, Tuple
+from typing import Dict, Tuple, AsyncGenerator
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import JSONResponse, StreamingResponse, Response
+from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
+
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from app.state import state
 from app.chain.pipeline import pipeline
 from app.config import logger
-
-# Justera denna import till din faktiska auth-funktion
-from app.auth import get_current_user  # t.ex. returnerar User-objekt eller liknande
+from app.errors import ValidationError, UserError, SystemError
 
 
 router = APIRouter(prefix="/ai", tags=["AI"])
 
+# SlowAPI limiter (same stil som i main.py)
+limiter = Limiter(key_func=get_remote_address)
 
-# ------------------------------------------------------------
-# In-memory rate limiting & caching (per process)
-# ------------------------------------------------------------
+# Cache: (ip, question_hash, stats_hash) -> {"body": dict, "etag": str}
+_cache_store: Dict[Tuple[str, str, str], Dict[str, object]] = {}
 
-# session_id -> list of timestamps (seconds)
-_rate_limit_window_seconds = 60
-_rate_limit_max_requests = 10
-_rate_limit_store: Dict[str, list[float]] = {}
+# Rate limit för AI
+AI_RATE_LIMIT = "10/minute"
 
-# (session_id, question_hash, stats_hash) -> cached response
-_cache_store: Dict[Tuple[str, str, str], dict] = {}
-
-
-# ------------------------------------------------------------
-# Request model
-# ------------------------------------------------------------
 
 class AskRequest(BaseModel):
     question: str
 
 
-# ------------------------------------------------------------
-# Helpers
-# ------------------------------------------------------------
-
 def _hash_stats(stats) -> str:
-    """
-    Create a stable hash of the current stats object.
-    This ensures cache invalidation when dataset changes.
-    """
     raw = repr(stats).encode("utf-8")
     return hashlib.sha256(raw).hexdigest()
 
@@ -56,91 +42,182 @@ def _hash_question(question: str) -> str:
     return hashlib.sha256(question.strip().encode("utf-8")).hexdigest()
 
 
-def _enforce_rate_limit(session_id: str):
-    """
-    Simple in-memory rate limiting per session.
-    Allows _rate_limit_max_requests per _rate_limit_window_seconds.
-    """
-    now = time.time()
-    window_start = now - _rate_limit_window_seconds
-
-    timestamps = _rate_limit_store.get(session_id, [])
-    # behåll bara de som ligger inom fönstret
-    timestamps = [t for t in timestamps if t >= window_start]
-
-    if len(timestamps) >= _rate_limit_max_requests:
-        raise HTTPException(
-            status_code=429,
-            detail="Rate limit exceeded for /ai/ask. Try again later."
-        )
-
-    timestamps.append(now)
-    _rate_limit_store[session_id] = timestamps
+def _compute_etag(payload: dict) -> str:
+    raw = repr(payload).encode("utf-8")
+    return hashlib.sha256(raw).hexdigest()
 
 
 # ------------------------------------------------------------
-# /ai/ask endpoint
+# /ai/ask – JSON + ETag + caching + async pipeline
 # ------------------------------------------------------------
 
 @router.post("/ask")
-def ask_ai(
-    request: AskRequest,
-    user=Depends(get_current_user),  # auth
-):
+@limiter.limit(AI_RATE_LIMIT)
+async def ask_ai(request: Request, payload: AskRequest):
     """
-    Executes the full Oraklet pipeline with:
-    - Auth (session-based)
-    - Rate limiting per session
-    - Caching per (session, question, stats)
+    AI endpoint with:
+    - IP-based rate limiting (SlowAPI)
+    - IP-based in-memory caching
+    - ETag support (304 Not Modified)
+    - Async model execution via threadpool
     """
 
-    # 0. Validate question
-    if not request.question.strip():
-        raise HTTPException(
-            status_code=400,
-            detail="Question cannot be empty."
-        )
+    client_ip = request.client.host
+    request_id = request.state.request_id
 
-    # 1. Ensure stats exist
+    logger.info({
+        "event": "ai_request_received",
+        "request_id": request_id,
+        "client_ip": client_ip,
+        "question": payload.question
+    })
+
+    # 1. Validate question
+    if not payload.question.strip():
+        raise UserError("Question cannot be empty.")
+
+    # 2. Ensure dataset exists
     if state.stats is None:
-        raise HTTPException(
-            status_code=400,
-            detail="No dataset uploaded. Upload data before asking questions."
-        )
+        raise UserError("No dataset uploaded. Upload data before asking questions.")
 
-    # 2. Identify session (justera efter din auth-modell)
-    #    Här antar vi att user har ett unikt id eller session_id
-    session_id = str(getattr(user, "id", "anonymous"))
-
-    # 3. Enforce rate limiting
-    _enforce_rate_limit(session_id)
-
-    # 4. Build cache key
+    # 3. Build cache key
     stats_hash = _hash_stats(state.stats)
-    question_hash = _hash_question(request.question)
-    cache_key = (session_id, question_hash, stats_hash)
+    question_hash = _hash_question(payload.question)
+    cache_key = (client_ip, question_hash, stats_hash)
 
-    # 5. Check cache
-    if cache_key in _cache_store:
-        logger.info("Cache hit for /ai/ask (session=%s)", session_id)
-        return _cache_store[cache_key]
+    client_etag = request.headers.get("If-None-Match")
 
-    logger.info("Cache miss for /ai/ask (session=%s)", session_id)
+    # 4. Cache lookup + ETag check
+    cached = _cache_store.get(cache_key)
+    if cached is not None:
+        etag = cached["etag"]
+        if client_etag == etag:
+            logger.info({
+                "event": "ai_not_modified",
+                "request_id": request_id,
+                "client_ip": client_ip,
+                "etag": etag
+            })
+            return Response(status_code=304)
 
-    # 6. Run pipeline with robust error mapping
+        logger.info({
+            "event": "ai_cache_hit",
+            "request_id": request_id,
+            "client_ip": client_ip
+        })
+        response = JSONResponse(content=cached["body"])
+        response.headers["ETag"] = etag
+        return response
+
+    logger.info({
+        "event": "ai_cache_miss",
+        "request_id": request_id,
+        "client_ip": client_ip
+    })
+
+    # 5. Run pipeline asynchronously in threadpool
     try:
-        result = pipeline.run(request.question)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        result = await run_in_threadpool(pipeline.run, payload.question)
+
+    except ValidationError as e:
+        raise UserError(str(e))
+
     except TimeoutError as e:
-        raise HTTPException(status_code=504, detail=str(e))
+        raise SystemError(str(e))
+
     except RuntimeError as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise SystemError(str(e))
 
-    # 7. Convert to dict for caching/response
+    # 6. Convert to dict and compute ETag
     result_dict = result.model_dump()
+    etag = _compute_etag(result_dict)
 
-    # 8. Store in cache
-    _cache_store[cache_key] = result_dict
+    # 7. Store in cache
+    _cache_store[cache_key] = {"body": result_dict, "etag": etag}
 
-    return result_dict
+    logger.info({
+        "event": "ai_response_generated",
+        "request_id": request_id,
+        "client_ip": client_ip,
+        "etag": etag
+    })
+
+    # 8. Return JSON with ETag
+    response = JSONResponse(content=result_dict)
+    response.headers["ETag"] = etag
+    return response
+
+
+# ------------------------------------------------------------
+# /ai/ask/stream – streaming endpoint (chunkad text)
+# ------------------------------------------------------------
+
+@router.post("/ask/stream")
+@limiter.limit(AI_RATE_LIMIT)
+async def ask_ai_stream(request: Request, payload: AskRequest):
+    """
+    Streaming variant av AI-endpointen.
+
+    Just nu:
+    - Kör samma pipeline i threadpool
+    - Streamar svaret i text-chunks
+    - Redo att bytas ut mot riktig token-streaming
+      när modellen byts till en som stödjer det.
+    """
+
+    client_ip = request.client.host
+    request_id = request.state.request_id
+
+    logger.info({
+        "event": "ai_stream_request_received",
+        "request_id": request_id,
+        "client_ip": client_ip,
+        "question": payload.question
+    })
+
+    if not payload.question.strip():
+        raise UserError("Question cannot be empty.")
+
+    if state.stats is None:
+        raise UserError("No dataset uploaded. Upload data before asking questions.")
+
+    stats_hash = _hash_stats(state.stats)
+    question_hash = _hash_question(payload.question)
+    cache_key = (client_ip, question_hash, stats_hash)
+
+    cached = _cache_store.get(cache_key)
+
+    async def streamer() -> AsyncGenerator[bytes, None]:
+        # 1. If cached, stream from cache
+        if cached is not None:
+            answer = cached["body"].get("answer", "")
+            for i in range(0, len(answer), 256):
+                yield answer[i:i+256].encode("utf-8")
+            return
+
+        # 2. Otherwise, run pipeline and stream result
+        try:
+            result = await run_in_threadpool(pipeline.run, payload.question)
+        except ValidationError as e:
+            # Streaming + fel är knepigt; här förenklar vi:
+            msg = f"Validation error: {str(e)}"
+            yield msg.encode("utf-8")
+            return
+        except TimeoutError as e:
+            msg = f"Timeout error: {str(e)}"
+            yield msg.encode("utf-8")
+            return
+        except RuntimeError as e:
+            msg = f"System error: {str(e)}"
+            yield msg.encode("utf-8")
+            return
+
+        result_dict = result.model_dump()
+        etag = _compute_etag(result_dict)
+        _cache_store[cache_key] = {"body": result_dict, "etag": etag}
+
+        answer = result_dict.get("answer", "")
+        for i in range(0, len(answer), 256):
+            yield answer[i:i+256].encode("utf-8")
+
+    return StreamingResponse(streamer(), media_type="text/plain")

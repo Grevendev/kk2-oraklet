@@ -17,8 +17,6 @@ from fastapi.middleware.gzip import GZipMiddleware
 
 from app.api.ai import router as ai_router
 
-
-
 from app.errors import (
     http_exception_handler,
     validation_exception_handler,
@@ -33,6 +31,9 @@ from app.errors import (
 from app.data import data_service, validate_and_clean_csv
 from app.schemas import UploadResponse, StatsResponse
 from app.config import logger
+
+#  global state import
+from app.state import state
 
 
 app = FastAPI()
@@ -192,11 +193,6 @@ class CircuitBreakerMiddleware(BaseHTTPMiddleware):
 app.add_middleware(CircuitBreakerMiddleware)
 
 app.include_router(ai_router)
-# -----------------------------------
-# REQUEST TIMEOUT PROTECTION
-# -----------------------------------
-
-
 
 # -----------------------------------
 # RESPONSE COMPRESSION
@@ -336,7 +332,7 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
 
 
     # -----------------------------------
-    # SCHEMA FINGERPRINTING (detect schema drift)
+    # SCHEMA FINGERPRINTING
     # -----------------------------------
     if data_service._df is not None:
         if data_service.is_schema_changed(df):
@@ -348,14 +344,16 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
                 "new_fingerprint": data_service.compute_schema_fingerprint(df),
                 "message": "Uploaded dataset schema differs from previous dataset."
             })
-            # OPTIONAL:
-            # raise UserError("Uploaded dataset schema differs from the previously uploaded dataset.")
 
 
     # -----------------------------------
     # STORE DATASET
     # -----------------------------------
     data_service.set_dataset(df)
+
+    # update global state for AI pipeline
+    state.dataset = df
+    state.stats = data_service.get_stats()
 
     logger.info({
         "event": "csv_upload_success",

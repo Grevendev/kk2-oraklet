@@ -8,9 +8,10 @@ def _csv_bytes(text: str) -> bytes:
 
 def test_circuit_breaker_opens_after_repeated_validation_errors(client, monkeypatch):
     # Gör tröskeln lägre i test för att slippa 10+ requests
-    monkeypatch.setattr(main_module, "MAX_FAILURES", 3, raising=False)
-    monkeypatch.setattr(main_module, "VALIDATION_WINDOW", 5, raising=False)
-    monkeypatch.setattr(main_module, "CIRCUIT_DURATION", 5, raising=False)
+    monkeypatch.setattr(main_module, "MAX_VALIDATION_FAILURES", 3, raising=False)
+    monkeypatch.setattr(main_module, "VALIDATION_WINDOW_SECONDS", 5, raising=False)
+    monkeypatch.setattr(main_module, "CIRCUIT_BREAKER_DURATION", 5, raising=False)
+
 
     # Skicka ogiltiga uploads (fel filtyp)
     for _ in range(3):

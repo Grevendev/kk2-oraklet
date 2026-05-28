@@ -170,6 +170,10 @@ def validate_and_clean_csv(file_bytes: bytes) -> pd.DataFrame:
     """Validate CSV content, enforce size limits, encoding, clean column names,
     auto-detect delimiter and auto-convert types."""
 
+    # Fix. Empty file should raise ValidationError
+    if not file_bytes or not file_bytes.strip():
+        raise ValidationError("CSV file is empty.")
+
     MAX_SIZE_MB = 10
     MAX_COLUMNS = 100
     MIN_NUMERIC_COLUMNS = 1

@@ -227,7 +227,10 @@ def validate_and_clean_csv(file_bytes: bytes) -> pd.DataFrame:
         for char in dangerous_unicode:
             df[col] = df[col].astype(str).str.replace(char, "", regex=False)
 
-    df = df.replace({r"[\x00-\x1F\x7F]": ""}, regex=True)
+    for col in df.columns:
+        if df[col].dtype == object:
+            df[col] = df[col].str.replace(r"[\x00-\x1F\x7F]", "", regex=True)
+
 
     def escape_excel_formula(value):
         if isinstance(value, str) and value.startswith(("=", "+", "-", "@")):
@@ -302,6 +305,19 @@ def validate_and_clean_csv(file_bytes: bytes) -> pd.DataFrame:
     # -----------------------------------
     # ANALYSIS READINESS VALIDATION
     # -----------------------------------
+# -----------------------------------
+# ANALYSIS READINESS VALIDATION
+# -----------------------------------
+
+    logger.warning({
+        "event": "debug_dtypes_before_numeric_check",
+        "dtypes": {col: str(df[col].dtype) for col, dt in df.dtypes.items()},
+        "head": df.head().to_dict()
+    })
+
+    numeric_cols = df.select_dtypes(include=["number"]).columns
+
+
     if df.shape[0] < 1:
         raise ValidationError("Dataset must contain at least one data row.")
 

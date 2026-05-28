@@ -20,7 +20,6 @@ from app.api.ai import router as ai_router
 
 from app.errors import (
     http_exception_handler,
-    validation_exception_handler,
     ValidationError,
     UserError,
     SystemError,
@@ -231,7 +230,6 @@ app.add_middleware(SecurityHeadersMiddleware)
 # GLOBAL EXCEPTION HANDLERS
 # -----------------------------------
 app.add_exception_handler(HTTPException, http_exception_handler)
-app.add_exception_handler(Exception, validation_exception_handler)
 
 app.add_exception_handler(ValidationError, validation_error_handler)
 app.add_exception_handler(UserError, user_error_handler)
@@ -317,43 +315,21 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
     try:
         df = await run_in_threadpool(validate_and_clean_csv, file_bytes)
 
-    except ValidationError as e:
-        now = time.time()
-        validation_failures.append(now)
+    except ValidationError:
+        raise
 
-        while validation_failures and validation_failures[0] < now - VALIDATION_WINDOW_SECONDS:
-            validation_failures.pop(0)
-
-        if len(validation_failures) >= MAX_VALIDATION_FAILURES:
-            global circuit_open_until
-            circuit_open_until = now + CIRCUIT_BREAKER_DURATION
-
-            logger.error({
-                "event": "circuit_breaker_opened",
-                "request_id": request.state.request_id,
-                "failures_last_30s": len(validation_failures),
-                "open_until": circuit_open_until
-            })
-
-        logger.warning({
-            "event": "csv_upload_validation_failed",
-            "request_id": request.state.request_id,
-            "filename": file.filename,
-            "reason": str(e),
-            "client_ip": request.client.host
-        })
-
-        raise e
+    except UserError:
+        raise
 
     except Exception as e:
         logger.error({
-            "event": "csv_upload_unexpected_error",
+            "event": "unexpected_internal_error",
             "request_id": request.state.request_id,
             "filename": file.filename,
             "error": str(e),
             "client_ip": request.client.host
         })
-        raise SystemError(str(e))
+        raise SystemError("Unexpected internal error") from e
 
     # -----------------------------------
     # SCHEMA FINGERPRINTING
@@ -407,7 +383,6 @@ def get_stats(request: Request):
         "user_agent": request.headers.get("User-Agent", "unknown")
     })
 
-    # Låt ValidationError bubbla upp
     stats = data_service.get_stats()
 
     etag = data_service.get_stats_etag()
@@ -421,6 +396,7 @@ def get_stats(request: Request):
     response.headers["ETag"] = etag
     return response
 
+
 @app.get("/data/download/csv")
 @limiter.limit("10/minute")
 def download_csv(request: Request):
@@ -430,7 +406,6 @@ def download_csv(request: Request):
         "client_ip": request.client.host
     })
 
-    # Låt ValidationError bubbla upp
     csv_bytes = data_service.get_csv()
 
     return StreamingResponse(
@@ -438,6 +413,7 @@ def download_csv(request: Request):
         media_type="text/csv",
         headers={"Content-Disposition": "attachment; filename=dataset.csv"}
     )
+
 
 @app.get("/data/download/parquet")
 @limiter.limit("10/minute")
@@ -448,7 +424,6 @@ def download_parquet(request: Request):
         "client_ip": request.client.host
     })
 
-    # Låt ValidationError bubbla upp
     parquet_bytes = data_service.get_parquet()
 
     return StreamingResponse(
@@ -456,4 +431,3 @@ def download_parquet(request: Request):
         media_type="application/octet-stream",
         headers={"Content-Disposition": "attachment; filename=dataset.parquet"}
     )
-

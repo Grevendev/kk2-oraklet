@@ -8,7 +8,7 @@ def test_ai_ask_requires_dataset(client):
     assert resp.json()["error_type"] == "UserError"
 
 
-def test_ai_ask_returns_mocked_response(client, mock_pipeline_run):
+def test_ai_ask_returns_mocked_response(client):
     csv = "city,temp\nMalmo,10\nLund,12\n"
     files = {"file": ("weather.csv", _csv_bytes(csv), "text/csv")}
     client.post("/data/upload", files=files)
@@ -25,7 +25,7 @@ def test_ai_ask_returns_mocked_response(client, mock_pipeline_run):
     assert "ETag" in resp.headers
 
 
-def test_ai_ask_etag_304(client, mock_pipeline_run):
+def test_ai_ask_etag_304(client):
     csv = "city,temp\nMalmo,10\nLund,12\n"
     files = {"file": ("weather.csv", _csv_bytes(csv), "text/csv")}
     client.post("/data/upload", files=files)
@@ -37,7 +37,7 @@ def test_ai_ask_etag_304(client, mock_pipeline_run):
     assert resp2.status_code == 304
 
 
-def test_ai_ask_cache_hit(client, mock_pipeline_run):
+def test_ai_ask_cache_hit(client):
     csv = "city,temp\nMalmo,10\nLund,12\n"
     files = {"file": ("weather.csv", csv.encode(), "text/csv")}
     client.post("/data/upload", files=files)
@@ -52,7 +52,7 @@ def test_ai_ask_cache_hit(client, mock_pipeline_run):
     assert resp2.json() == resp1.json()
 
 
-def test_ai_ask_cache_invalidated_after_new_upload(client, mock_pipeline_run):
+def test_ai_ask_cache_invalidated_after_new_upload(client):
     csv1 = "city,temp\nMalmo,10\n"
     csv2 = "city,temp\nLund,20\n"
 
@@ -67,7 +67,7 @@ def test_ai_ask_cache_invalidated_after_new_upload(client, mock_pipeline_run):
     assert etag1 != etag2
 
 
-def test_ai_ask_rejects_empty_question(client, mock_pipeline_run):
+def test_ai_ask_rejects_empty_question(client):
     csv = "city,temp\nMalmo,10\n"
     client.post("/data/upload", files={"file": ("a.csv", csv.encode(), "text/csv")})
 

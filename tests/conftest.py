@@ -1,55 +1,51 @@
 # tests/conftest.py
+
 import os
 import pytest
 from fastapi.testclient import TestClient
-from app.schemas import AIResponse
-
-os.environ["TESTING"] = "1"
 
 from app.main import app
 from app.data import data_service
 from app.state import state
+from app.container_test import get_test_pipeline
+
+os.environ["TESTING"] = "1"
 
 
 @pytest.fixture(autouse=True)
 def reset_state():
-    # Rensa dataservice
+    """
+    Rensar dataservice, state och AI-cache före och efter varje test.
+    """
+    from app.api import ai
+
+    # Före test
     data_service.clear()
     state.dataset = None
     state.stats = None
-
-    # Rensa AI-cache
-    from app.api import ai
     ai._cache_store.clear()
 
     yield
 
-    # Rensa igen efter testet
+    # Efter test
     data_service.clear()
     state.dataset = None
     state.stats = None
-
-    from app.api import ai
     ai._cache_store.clear()
 
+
+@pytest.fixture(autouse=True)
+def patch_pipeline(monkeypatch):
+    """
+    Ersätter produktions-pipelinen med TestPipeline för ALLA tester.
+    """
+    from app.api import ai
+    monkeypatch.setattr(ai, "pipeline", get_test_pipeline())
 
 
 @pytest.fixture
 def client():
+    """
+    Ger en TestClient som använder den patchade test-pipelinen.
+    """
     return TestClient(app)
-
-
-@pytest.fixture
-def mock_pipeline_run(monkeypatch):
-    """Opt-in mock av pipeline.run för tester som vill ha det."""
-    from app.api import ai
-
-    def fake_run(question: str):
-        return AIResponse(
-            question=question,
-            answer="Detta är ett mockat AI‑svar.",
-            reasoning="Mockad reasoning.",
-            stats_used={"temp": {"mean": 10}}
-        )
-
-    monkeypatch.setattr(ai.pipeline, "run", fake_run)

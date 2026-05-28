@@ -205,7 +205,10 @@ def validate_and_clean_csv(file_bytes: bytes) -> pd.DataFrame:
     # EARLY TYPE INFERENCE
     # -----------------------------------
     for col in df.columns:
-        df[col] = pd.to_numeric(df[col], errors="coerce")
+    # Only convert if column is numeric-like
+        if df[col].astype(str).str.match(r"^-?\d+(\.\d+)?$").all():
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+
 
     # Clean column names
     cleaned_columns = []

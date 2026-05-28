@@ -322,11 +322,14 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
         raise
 
     except Exception as e:
+        import traceback
         logger.error({
             "event": "unexpected_internal_error",
+            "traceback": traceback.format_exc(),
+            "error_type": type(e).__name__,
+            "error": str(e),
             "request_id": request.state.request_id,
             "filename": file.filename,
-            "error": str(e),
             "client_ip": request.client.host
         })
         raise SystemError("Unexpected internal error") 

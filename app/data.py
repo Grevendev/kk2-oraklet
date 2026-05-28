@@ -103,6 +103,65 @@ class DataService:
             f"schema_fingerprint: {self._schema_fingerprint}"
         )
 
+    # -----------------------------
+    # Get stats (with caching)
+    # -----------------------------
+    def get_stats(self) -> Dict[str, Any]:
+        """Return cached stats or compute new ones."""
+        if self._df is None:
+            raise ValidationError("No dataset uploaded yet.")
+
+        # Return cached stats if still valid
+        if (
+            self._stats_cache is not None
+            and self._stats_timestamp is not None
+            and datetime.utcnow() - self._stats_timestamp < timedelta(seconds=self.STATS_TTL_SECONDS)
+        ):
+            return self._stats_cache
+
+        # Compute new stats
+        stats = {}
+        for col in self._df.select_dtypes(include=["number"]).columns:
+            series = self._df[col]
+            stats[col] = {
+                "mean": float(series.mean()),
+                "min": float(series.min()),
+                "max": float(series.max()),
+                "std": float(series.std()),
+                "count": int(series.count()),
+            }
+
+        # Metadata
+        metadata = {
+            "rows": int(self._df.shape[0]),
+            "columns": int(self._df.shape[1]),
+            "generated_at": datetime.utcnow().isoformat(),
+        }
+
+        stats["_metadata"] = metadata
+
+        # Cache
+        self._stats_cache = stats
+        self._stats_timestamp = datetime.utcnow()
+
+        return stats
+
+    # -----------------------------
+    # Get CSV bytes
+    # -----------------------------
+    def get_csv(self) -> bytes:
+        if self._df is None:
+            raise ValidationError("No dataset uploaded yet.")
+        return self._df.to_csv(index=False).encode("utf-8")
+
+    # -----------------------------
+    # Get Parquet bytes
+    # -----------------------------
+    def get_parquet(self) -> bytes:
+        if self._parquet_bytes is None:
+            raise ValidationError("No dataset uploaded yet.")
+        return self._parquet_bytes
+
 
 # -----------------------------
 # CSV validation
@@ -270,6 +329,7 @@ def validate_and_clean_csv(file_bytes: bytes) -> pd.DataFrame:
         raise ValidationError(f"Dataset contains columns with only null values: {null_columns}")
 
     return df
+
 
 # Global service instance
 data_service = DataService()

@@ -43,7 +43,7 @@ else:
 # ------------------------------------------------------------
 # CACHE STORE
 # ------------------------------------------------------------
-_cache_store: Dict[Tuple[str, str, str], Dict[str, object]] = {}
+_cache_store: Dict[Tuple[str, str], Dict[str, object]] = {}
 
 AI_RATE_LIMIT = "10/minute"
 
@@ -90,13 +90,12 @@ async def ask_ai(request: Request, payload: AskRequest):
     if state.stats is None:
         raise UserError("No dataset uploaded. Upload data before asking questions.")
 
-    stats_hash = _hash_stats(state.stats)
+    # Cache key
     question_hash = _hash_question(payload.question)
     dataset_fp = data_service._data_fingerprint
     cache_key = (dataset_fp, question_hash)
 
-
-
+    # ETag check
     client_etag = request.headers.get("If-None-Match")
 
     cached = _cache_store.get(cache_key)
@@ -110,6 +109,7 @@ async def ask_ai(request: Request, payload: AskRequest):
         response.headers["ETag"] = etag
         return response
 
+    # Run pipeline with proper error handling
     try:
         result = await run_in_threadpool(pipeline.run, payload.question)
     except ValidationError as e:
@@ -119,7 +119,14 @@ async def ask_ai(request: Request, payload: AskRequest):
     except RuntimeError as e:
         raise SystemError(str(e))
 
-    result_dict = result.model_dump()
+    # Build dict INCLUDING answer + reasoning so ETag changes
+    result_dict = {
+        "question": result.question,
+        "answer": result.answer,
+        "reasoning": result.reasoning,
+        "stats_used": result.stats_used,
+    }
+
     etag = _compute_etag(result_dict)
 
     validated = AIResponse(**result_dict)
@@ -155,12 +162,9 @@ async def ask_ai_stream(request: Request, payload: AskRequest):
     if state.stats is None:
         raise UserError("No dataset uploaded. Upload data before asking questions.")
 
-    stats_hash = _hash_stats(state.stats)
     question_hash = _hash_question(payload.question)
     dataset_fp = data_service._data_fingerprint
     cache_key = (dataset_fp, question_hash)
-
-
 
     cached = _cache_store.get(cache_key)
 
@@ -184,7 +188,13 @@ async def ask_ai_stream(request: Request, payload: AskRequest):
             yield f"System error: {str(e)}".encode("utf-8")
             return
 
-        result_dict = result.model_dump()
+        result_dict = {
+            "question": result.question,
+            "answer": result.answer,
+            "reasoning": result.reasoning,
+            "stats_used": result.stats_used,
+        }
+
         etag = _compute_etag(result_dict)
 
         validated = AIResponse(**result_dict)

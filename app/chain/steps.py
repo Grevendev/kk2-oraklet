@@ -125,7 +125,12 @@ class LLMRunner:
         if os.getenv("TESTING") == "1":
             class FakeHF:
                 def __call__(self, prompt, max_new_tokens=200, temperature=0.3, do_sample=False):
-                    return [{"generated_text": f"Mocked LLM output for: {prompt}"}]
+                    return [{
+                        "generated_text": (
+                            f"{prompt}\n\n"
+                            f"Answer: Detta är ett mockat AI-svar."
+                        )
+                    }]
 
             return FakeHF()
 

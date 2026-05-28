@@ -272,7 +272,7 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
     # -----------------------------------
     if data_service._df is not None:
         if data_service.is_schema_changed(df):
-            raise ValidationError("Schema drift detected")
+            raise UserError("Schema drift detected")
 
     # -----------------------------------
     # STORE DATASET + UPDATE STATE

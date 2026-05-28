@@ -147,6 +147,7 @@ class DataService:
             "rows": int(self._df.shape[0]),
             "columns": int(self._df.shape[1]),
             "generated_at": datetime.utcnow().isoformat(),
+            "fingerprint": self._data_fingerprint,
         }
 
         stats["_metadata"] = metadata

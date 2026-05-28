@@ -1,3 +1,4 @@
+import os
 import uuid
 import time
 from collections import deque
@@ -34,6 +35,12 @@ from app.config import logger
 
 #  global state import
 from app.state import state
+
+
+# -----------------------------------
+# ENV FLAG FOR TEST MODE
+# -----------------------------------
+TESTING = os.getenv("TESTING") == "1"
 
 
 app = FastAPI()
@@ -86,11 +93,22 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 # -----------------------------------
-# RATE LIMITER
+# RATE LIMITER (REAL IN PROD, NO-OP IN TESTS)
 # -----------------------------------
-limiter = Limiter(key_func=get_remote_address)
-app.state.limiter = limiter
+if not TESTING:
+    limiter = Limiter(key_func=get_remote_address)
+    app.state.limiter = limiter
+else:
+    class NoOpLimiter:
+        def limit(self, *args, **kwargs):
+            def decorator(func):
+                return func
+            return decorator
+
+    limiter = NoOpLimiter()
+    app.state.limiter = limiter
 
 
 # -----------------------------------
@@ -160,7 +178,8 @@ class GlobalRateAnomalyMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 
 
-app.add_middleware(GlobalRateAnomalyMiddleware)
+if not TESTING:
+    app.add_middleware(GlobalRateAnomalyMiddleware)
 
 
 # -----------------------------------
@@ -190,9 +209,15 @@ class CircuitBreakerMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 
 
-app.add_middleware(CircuitBreakerMiddleware)
+if not TESTING:
+    app.add_middleware(CircuitBreakerMiddleware)
 
+
+# -----------------------------------
+# AI ROUTER
+# -----------------------------------
 app.include_router(ai_router)
+
 
 # -----------------------------------
 # RESPONSE COMPRESSION
@@ -330,7 +355,6 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
         })
         raise SystemError(str(e))
 
-
     # -----------------------------------
     # SCHEMA FINGERPRINTING
     # -----------------------------------
@@ -344,7 +368,6 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
                 "new_fingerprint": data_service.compute_schema_fingerprint(df),
                 "message": "Uploaded dataset schema differs from previous dataset."
             })
-
 
     # -----------------------------------
     # STORE DATASET

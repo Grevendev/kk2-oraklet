@@ -17,6 +17,7 @@ from app.config import (
 )
 
 from app.chain.contracts import PipelineStep
+from app.chain.circuit_breaker import CircuitBreaker
 
 
 # ============================================================
@@ -72,13 +73,16 @@ class PromptBuilder(PipelineStep[PromptBuilderInput, PromptBuilderOutput]):
 
 
 # ============================================================
-# Step 2 — LLMRunner
+# Step 2 — LLMRunner (with Circuit Breaker)
 # ============================================================
 
 class LLMRunner(PipelineStep[PromptBuilderOutput, LLMRunnerOutput]):
 
     _pipeline = None
     _pipeline_lock = threading.Lock()
+
+    def __init__(self):
+        self.circuit = CircuitBreaker()
 
     @classmethod
     def _get_pipeline(cls):
@@ -106,6 +110,9 @@ class LLMRunner(PipelineStep[PromptBuilderOutput, LLMRunnerOutput]):
     def invoke(self, input: PromptBuilderOutput) -> LLMRunnerOutput:
         logger.info("LLMRunner invoked")
 
+        # Circuit Breaker: before call
+        self.circuit.before_call()
+
         generator = self._get_pipeline()
 
         def run_model():
@@ -116,12 +123,22 @@ class LLMRunner(PipelineStep[PromptBuilderOutput, LLMRunnerOutput]):
                 do_sample=False
             )
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-            future = executor.submit(run_model)
-            result = future.result(timeout=LLM_TIMEOUT_SECONDS)
+        try:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(run_model)
+                result = future.result(timeout=LLM_TIMEOUT_SECONDS)
 
-        raw_text = result[0]["generated_text"]
-        return LLMRunnerOutput(raw_output=raw_text)
+            raw_text = result[0]["generated_text"]
+
+            # Circuit Breaker: success
+            self.circuit.after_success()
+
+            return LLMRunnerOutput(raw_output=raw_text)
+
+        except Exception as exc:
+            # Circuit Breaker: failure
+            self.circuit.after_failure()
+            raise
 
 
 # ============================================================

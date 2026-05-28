@@ -93,7 +93,8 @@ async def ask_ai(request: Request, payload: AskRequest):
     stats_hash = _hash_stats(state.stats)
     question_hash = _hash_question(payload.question)
     dataset_fp = data_service._data_fingerprint
-    cache_key = (client_ip, dataset_fp, question_hash, stats_hash)
+    cache_key = (dataset_fp, question_hash)
+
 
 
     client_etag = request.headers.get("If-None-Match")
@@ -157,7 +158,8 @@ async def ask_ai_stream(request: Request, payload: AskRequest):
     stats_hash = _hash_stats(state.stats)
     question_hash = _hash_question(payload.question)
     dataset_fp = data_service._data_fingerprint
-    cache_key = (client_ip, dataset_fp, question_hash, stats_hash)
+    cache_key = (dataset_fp, question_hash)
+
 
 
     cached = _cache_store.get(cache_key)

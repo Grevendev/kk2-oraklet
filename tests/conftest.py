@@ -1,3 +1,4 @@
+# tests/conftest.py
 import os
 import pytest
 from fastapi.testclient import TestClient
@@ -26,16 +27,9 @@ def client():
     return TestClient(app)
 
 
-@pytest.fixture(autouse=True)
-def mock_pipeline_run(request, monkeypatch):
-    """
-    Global mock av pipeline.run, men DISABLAS om testet själv mockar pipeline.run.
-    """
-
-    # Om testet själv använder monkeypatch på pipeline.run → disable denna mock
-    if "pipeline.run" in request.fixturenames:
-        return
-
+@pytest.fixture
+def mock_pipeline_run(monkeypatch):
+    """Opt-in mock av pipeline.run för tester som vill ha det."""
     from app.api import ai
 
     def fake_run(question: str):

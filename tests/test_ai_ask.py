@@ -8,7 +8,7 @@ def test_ai_ask_requires_dataset(client):
     assert resp.json()["error_type"] == "UserError"
 
 
-def test_ai_ask_returns_mocked_response(client):
+def test_ai_ask_returns_mocked_response(client, mock_pipeline_run):
     csv = "city,temp\nMalmo,10\nLund,12\n"
     files = {"file": ("weather.csv", _csv_bytes(csv), "text/csv")}
     client.post("/data/upload", files=files)
@@ -25,7 +25,7 @@ def test_ai_ask_returns_mocked_response(client):
     assert "ETag" in resp.headers
 
 
-def test_ai_ask_etag_304(client):
+def test_ai_ask_etag_304(client, mock_pipeline_run):
     csv = "city,temp\nMalmo,10\nLund,12\n"
     files = {"file": ("weather.csv", _csv_bytes(csv), "text/csv")}
     client.post("/data/upload", files=files)
@@ -36,23 +36,23 @@ def test_ai_ask_etag_304(client):
     resp2 = client.post("/ai/ask", json={"question": "Hej"}, headers={"If-None-Match": etag})
     assert resp2.status_code == 304
 
-def test_ai_ask_cache_hit(client):
+
+def test_ai_ask_cache_hit(client, mock_pipeline_run):
     csv = "city,temp\nMalmo,10\nLund,12\n"
     files = {"file": ("weather.csv", csv.encode(), "text/csv")}
     client.post("/data/upload", files=files)
 
-    # First request
     resp1 = client.post("/ai/ask", json={"question": "Hej"})
     etag1 = resp1.headers["ETag"]
 
-    # Second request (same question, same stats)
     resp2 = client.post("/ai/ask", json={"question": "Hej"})
     etag2 = resp2.headers["ETag"]
 
     assert etag1 == etag2
     assert resp2.json() == resp1.json()
 
-def test_ai_ask_cache_invalidated_after_new_upload(client):
+
+def test_ai_ask_cache_invalidated_after_new_upload(client, mock_pipeline_run):
     csv1 = "city,temp\nMalmo,10\n"
     csv2 = "city,temp\nLund,20\n"
 
@@ -66,7 +66,8 @@ def test_ai_ask_cache_invalidated_after_new_upload(client):
 
     assert etag1 != etag2
 
-def test_ai_ask_rejects_empty_question(client):
+
+def test_ai_ask_rejects_empty_question(client, mock_pipeline_run):
     csv = "city,temp\nMalmo,10\n"
     client.post("/data/upload", files={"file": ("a.csv", csv.encode(), "text/csv")})
 
@@ -74,13 +75,16 @@ def test_ai_ask_rejects_empty_question(client):
     assert resp.status_code == 400
     assert resp.json()["error_type"] == "UserError"
 
+
 def test_ai_ask_pipeline_validation_error(client, monkeypatch):
     from app.errors import ValidationError
+    from app.api import ai   # <-- HÄR
 
     def fake_error(question):
         raise ValidationError("Invalid question")
 
-    monkeypatch.setattr("app.api.ai.pipeline.run", fake_error)
+    # Patcha pipeline-instansen direkt
+    monkeypatch.setattr(ai.pipeline, "run", fake_error)
 
     csv = "city,temp\nMalmo,10\n"
     client.post("/data/upload", files={"file": ("a.csv", csv.encode(), "text/csv")})
@@ -88,3 +92,4 @@ def test_ai_ask_pipeline_validation_error(client, monkeypatch):
     resp = client.post("/ai/ask", json={"question": "Hej"})
     assert resp.status_code == 400
     assert resp.json()["error_type"] == "UserError"
+

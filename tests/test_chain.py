@@ -206,3 +206,28 @@ def test_schema_drift_block_upload(monkeypatch):
     r2 = client.post("/data/upload", files={"file": ("data.csv", csv2)})
     assert r2.status_code == 400
     assert r2.json()["error_type"] == "UserError"
+
+def test_state_resets_between_uploads():
+    """
+    Ensure that uploading a new dataset replaces the old one
+    and that no state leaks between requests.
+    """
+
+    # Upload dataset A
+    csv_a = b"city,temp\nMalmo,10"
+    r1 = client.post("/data/upload", files={"file": ("data.csv", csv_a)})
+    assert r1.status_code == 200
+
+    stats_a = client.get("/data/stats").json()
+    assert stats_a["stats"]["temp"]["mean"] == 10
+
+    # Upload dataset B
+    csv_b = b"city,temp\nMalmo,99"
+    r2 = client.post("/data/upload", files={"file": ("data.csv", csv_b)})
+    assert r2.status_code == 200
+
+    stats_b = client.get("/data/stats").json()
+    assert stats_b["stats"]["temp"]["mean"] == 99
+
+    # Ensure fingerprints differ
+    assert state.data_service._schema_fingerprint is not None

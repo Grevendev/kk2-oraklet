@@ -132,3 +132,56 @@ def test_upload_and_download_parquet():
     parquet_response = client.get("/data/download/parquet")
     assert parquet_response.status_code == 200
     assert parquet_response.headers["Content-Disposition"] == "attachment; filename=dataset.parquet"
+
+ENDPOINTS = [
+    "/data/upload",
+    "/data/stats",
+    "/data/download/csv",
+    "/data/download/parquet",
+]
+
+
+def test_error_model_consistency():
+    """
+    Ensure all endpoints return the standardized ErrorResponse model
+    when triggered with invalid input.
+    """
+
+    for endpoint in ENDPOINTS:
+        if endpoint == "/data/upload":
+            response = client.post(endpoint, files={"file": ("bad.txt", b"hello")})
+        else:
+            response = client.get(endpoint)
+
+        assert response.status_code in (400, 422)
+        body = response.json()
+
+        assert "error_type" in body
+        assert "message" in body
+        assert "details" in body
+
+def test_stats_structure_is_correct():
+    """
+    Ensure /data/stats returns a well-structured stats object
+    with expected keys and numeric values.
+    """
+
+    csv = b"city,temp\nMalmo,10\nLund,20"
+    upload = client.post("/data/upload", files={"file": ("data.csv", csv)})
+    assert upload.status_code == 200
+
+    response = client.get("/data/stats")
+    assert response.status_code == 200
+
+    body = response.json()
+    assert "stats" in body
+
+    stats = body["stats"]
+    assert "temp" in stats
+
+    temp_stats = stats["temp"]
+
+    # Expected keys
+    for key in ("mean", "min", "max", "std", "count"):
+        assert key in temp_stats
+        assert isinstance(temp_stats[key], (int, float))

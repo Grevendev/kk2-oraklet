@@ -100,3 +100,18 @@ def test_roundtrip_csv_parquet_csv():
 
     # Compare with original CSV
     assert csv_roundtrip == original_csv
+
+def test_csv_download_has_correct_headers():
+    """
+    Ensure CSV download endpoint returns correct Content-Disposition header.
+    """
+
+    csv = b"city,temp\nMalmo,10"
+    upload = client.post("/data/upload", files={"file": ("data.csv", csv)})
+    assert upload.status_code == 200
+
+    response = client.get("/data/download/csv")
+    assert response.status_code == 200
+
+    assert "Content-Disposition" in response.headers
+    assert response.headers["Content-Disposition"] == "attachment; filename=dataset.csv"

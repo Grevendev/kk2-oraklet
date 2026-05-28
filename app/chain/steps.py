@@ -5,6 +5,7 @@ from pydantic import BaseModel
 import threading
 import concurrent.futures
 import os
+import asyncio
 
 from transformers import pipeline
 
@@ -73,7 +74,7 @@ class PromptBuilder(PipelineStep[PromptBuilderInput, PromptBuilderOutput]):
 
 
 # ============================================================
-# Step 2 — LLMRunner (with Circuit Breaker)
+# Step 2 — LLMRunner (Circuit Breaker + Timeout + Async support)
 # ============================================================
 
 class LLMRunner(PipelineStep[PromptBuilderOutput, LLMRunnerOutput]):
@@ -115,7 +116,7 @@ class LLMRunner(PipelineStep[PromptBuilderOutput, LLMRunnerOutput]):
 
         generator = self._get_pipeline()
 
-        def run_model():
+        def run_model_sync():
             return generator(
                 input.prompt,
                 max_new_tokens=200,
@@ -123,10 +124,15 @@ class LLMRunner(PipelineStep[PromptBuilderOutput, LLMRunnerOutput]):
                 do_sample=False
             )
 
+        async def run_async():
+            return await run_with_timeout(
+                lambda: run_model_sync(),
+                timeout=LLM_TIMEOUT_SECONDS
+            )
+
         try:
-            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(run_model)
-                result = future.result(timeout=LLM_TIMEOUT_SECONDS)
+            # Kör async timeout även om modellen är sync
+            result = asyncio.run(run_async())
 
             raw_text = result[0]["generated_text"]
 
@@ -135,10 +141,18 @@ class LLMRunner(PipelineStep[PromptBuilderOutput, LLMRunnerOutput]):
 
             return LLMRunnerOutput(raw_output=raw_text)
 
+        except asyncio.TimeoutError:
+            self.circuit.after_failure()
+            logger.error("LLMRunner timeout exceeded")
+            raise PipelineError(
+                message=f"LLM timeout after {LLM_TIMEOUT_SECONDS} seconds",
+                step_name="LLMRunner",
+            )
+
         except Exception as exc:
-            # Circuit Breaker: failure
             self.circuit.after_failure()
             raise
+
 
 
 # ============================================================
@@ -165,3 +179,14 @@ class ResponseParser(PipelineStep[LLMRunnerOutput, ResponseParserOutput]):
             stats_used={"temp": {"mean": 10}},
             model=MODEL_NAME
         )
+
+async def run_with_timeout(func, timeout: float):
+    """
+    Runs a sync or async function with timeout support.
+    If func is sync, it is executed in a thread pool.
+    """
+    if asyncio.iscoroutinefunction(func):
+        return await asyncio.wait_for(func(), timeout=timeout)
+
+    loop = asyncio.get_event_loop()
+    return await asyncio.wait_for(loop.run_in_executor(None, func), timeout=timeout)

@@ -2,6 +2,9 @@ import os
 import uuid
 import time
 from collections import deque
+import math
+
+import pandas as pd
 
 from fastapi import FastAPI, UploadFile, File, HTTPException, Request
 from fastapi.responses import StreamingResponse, JSONResponse
@@ -61,6 +64,26 @@ MAX_VALIDATION_FAILURES = 10
 CIRCUIT_BREAKER_DURATION = 30
 
 
+def record_validation_failure():
+    """Record a validation failure and possibly open the circuit."""
+    global circuit_open_until
+    now = time.time()
+    validation_failures.append(now)
+
+    # keep only failures in the last VALIDATION_WINDOW_SECONDS
+    recent = [t for t in validation_failures if t > now - VALIDATION_WINDOW_SECONDS]
+    validation_failures[:] = recent
+
+    if len(validation_failures) >= MAX_VALIDATION_FAILURES:
+        circuit_open_until = now + CIRCUIT_BREAKER_DURATION
+        logger.warning({
+            "event": "circuit_breaker_opened",
+            "opened_until": circuit_open_until,
+            "failures_in_window": len(validation_failures),
+            "window_seconds": VALIDATION_WINDOW_SECONDS,
+        })
+
+
 # -----------------------------------
 # STARTUP & SHUTDOWN EVENTS
 # -----------------------------------
@@ -94,20 +117,10 @@ app.add_middleware(
 
 
 # -----------------------------------
-# RATE LIMITER (REAL IN PROD, NO-OP IN TESTS)
+# RATE LIMITER (AKTIV ÄVEN I TEST)
 # -----------------------------------
-if not TESTING:
-    limiter = Limiter(key_func=get_remote_address)
-    app.state.limiter = limiter
-else:
-    class NoOpLimiter:
-        def limit(self, *args, **kwargs):
-            def decorator(func):
-                return func
-            return decorator
-
-    limiter = NoOpLimiter()
-    app.state.limiter = limiter
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
 
 
 # -----------------------------------
@@ -177,12 +190,13 @@ class GlobalRateAnomalyMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 
 
+# Global anomaly kan vara avstängd i test om du vill
 if not TESTING:
     app.add_middleware(GlobalRateAnomalyMiddleware)
 
 
 # -----------------------------------
-# CIRCUIT BREAKER MIDDLEWARE
+# CIRCUIT BREAKER MIDDLEWARE (AKTIV ÄVEN I TEST)
 # -----------------------------------
 class CircuitBreakerMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
@@ -191,7 +205,7 @@ class CircuitBreakerMiddleware(BaseHTTPMiddleware):
         if now < circuit_open_until and request.url.path.startswith("/data/upload"):
             logger.warning({
                 "event": "circuit_breaker_blocked_request",
-                "request_id": request.state.request_id,
+                "request_id": getattr(request.state, "request_id", None),
                 "client_ip": request.client.host,
                 "blocked_until": circuit_open_until
             })
@@ -201,15 +215,14 @@ class CircuitBreakerMiddleware(BaseHTTPMiddleware):
                     "error_type": "CircuitBreakerOpen",
                     "message": "Service temporarily unavailable due to repeated validation failures.",
                     "retry_after_seconds": int(circuit_open_until - now),
-                    "request_id": request.state.request_id
+                    "request_id": getattr(request.state, "request_id", None)
                 }
             )
 
         return await call_next(request)
 
 
-if not TESTING:
-    app.add_middleware(CircuitBreakerMiddleware)
+app.add_middleware(CircuitBreakerMiddleware)
 
 
 # -----------------------------------
@@ -282,6 +295,7 @@ def health_check():
 @limiter.limit("5/minute")
 async def upload_data(request: Request, file: UploadFile = File(...)):
     if not file.filename.endswith(".csv"):
+        record_validation_failure()
         raise ValidationError("File must be a CSV.")
 
     file_bytes = await file.read()
@@ -315,10 +329,12 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
     try:
         df = await run_in_threadpool(validate_and_clean_csv, file_bytes)
 
-    except ValidationError:
-        raise
+    except ValidationError as e:
+        record_validation_failure()
+        raise e
 
     except UserError:
+        # UserError är 400, men räknas inte som valideringsfel för circuit breaker
         raise
 
     except Exception as e:
@@ -332,10 +348,10 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
             "filename": file.filename,
             "client_ip": request.client.host
         })
-        raise SystemError("Unexpected internal error") 
+        raise SystemError("Unexpected internal error")
 
     # -----------------------------------
-    # SCHEMA FINGERPRINTING
+    # SCHEMA FINGERPRINTING / DRIFT
     # -----------------------------------
     if data_service._df is not None:
         if data_service.is_schema_changed(df):
@@ -347,6 +363,8 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
                 "new_fingerprint": data_service.compute_schema_fingerprint(df),
                 "message": "Uploaded dataset schema differs from previous dataset."
             })
+            # schema drift ska ge 400
+            raise UserError("Schema drift detected")
 
     # -----------------------------------
     # STORE DATASET
@@ -386,17 +404,29 @@ def get_stats(request: Request):
         "user_agent": request.headers.get("User-Agent", "unknown")
     })
 
+    if data_service._df is None:
+        raise UserError("No dataset uploaded")
+
     stats = data_service.get_stats()
 
+    # ersätt NaN med None för JSON‑kompatibilitet
+    safe_stats = {}
+    for k, v in stats.items():
+        if isinstance(v, float) and math.isnan(v):
+            safe_stats[k] = None
+        else:
+            safe_stats[k] = v
+
     etag = data_service.get_stats_etag()
+    quoted_etag = f'"{etag}"'
     client_etag = request.headers.get("If-None-Match")
 
-    if client_etag == etag:
+    if client_etag == quoted_etag:
         return Response(status_code=304)
 
-    response = StatsResponse(stats=stats)
-    response = JSONResponse(content=response.model_dump())
-    response.headers["ETag"] = etag
+    response_model = StatsResponse(stats=safe_stats)
+    response = JSONResponse(content=response_model.model_dump())
+    response.headers["ETag"] = quoted_etag
     return response
 
 
@@ -409,7 +439,13 @@ def download_csv(request: Request):
         "client_ip": request.client.host
     })
 
+    if data_service._df is None:
+        raise ValidationError("No dataset uploaded")
+
     csv_bytes = data_service.get_csv()
+
+    # normalisera radslut till LF för testerna
+    csv_bytes = csv_bytes.replace(b"\r\n", b"\n")
 
     return StreamingResponse(
         iter([csv_bytes]),
@@ -426,6 +462,9 @@ def download_parquet(request: Request):
         "request_id": request.state.request_id,
         "client_ip": request.client.host
     })
+
+    if data_service._df is None:
+        raise ValidationError("No dataset uploaded")
 
     parquet_bytes = data_service.get_parquet()
 

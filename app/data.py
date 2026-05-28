@@ -205,7 +205,7 @@ def validate_and_clean_csv(file_bytes: bytes) -> pd.DataFrame:
     # EARLY TYPE INFERENCE
     # -----------------------------------
     for col in df.columns:
-        df[col] = pd.to_numeric(df[col], errors="ignore")
+        df[col] = pd.to_numeric(df[col], errors="coerce")
 
     # Clean column names
     cleaned_columns = []
@@ -273,12 +273,13 @@ def validate_and_clean_csv(file_bytes: bytes) -> pd.DataFrame:
     if df_memory > max_memory_bytes:
         raise ValidationError(f"Dataset uses too much memory ({df_memory} bytes). Max allowed is {max_memory_bytes}.")
 
-    logger.warning({
-        "event": "memory_guard_triggered",
-        "rows": df.shape[0],
-        "columns": df.shape[1],
-        "memory_bytes": df_memory
+    logger.info({
+    "event": "memory_guard_passed",
+    "rows": df.shape[0],
+    "columns": df.shape[1],
+    "memory_bytes": int(df_memory)
     })
+
 
     # -----------------------------------
     # AUTOMATIC TYPE CONVERSION
@@ -337,11 +338,15 @@ def validate_and_clean_csv(file_bytes: bytes) -> pd.DataFrame:
         raise ValidationError("Dataset must contain at least one numeric column for analysis.")
 
     id_like_columns = [col for col in df.columns if df[col].nunique() == df.shape[0]]
-    if len(id_like_columns) == df.shape[1]:
+
+    MIN_ROWS_FOR_ID_CHECK = 50  # eller 100 om du vill vara ännu försiktigare
+
+    if df.shape[0] >= MIN_ROWS_FOR_ID_CHECK and len(id_like_columns) == df.shape[1]:
         raise ValidationError(
             "Dataset appears to contain only ID-like columns (all values unique). "
             "At least one column must contain repeated or aggregatable values."
         )
+
 
     null_columns = [col for col in df.columns if df[col].isna().all()]
     if null_columns:

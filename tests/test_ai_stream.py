@@ -19,3 +19,17 @@ def test_ai_stream_returns_chunks(client):
 
     chunks = b"".join(resp.iter_bytes())
     assert b"Detta \xc3\xa4r ett mockat AI" in chunks
+
+def test_ai_stream_uses_cache(client):
+    csv = "city,temp\nMalmo,10\n"
+    client.post("/data/upload", files={"file": ("a.csv", csv.encode(), "text/csv")})
+
+    # First call (cache miss)
+    resp1 = client.post("/ai/ask/stream", json={"question": "Hej"})
+    chunks1 = b"".join(resp1.iter_bytes())
+
+    # Second call (cache hit)
+    resp2 = client.post("/ai/ask/stream", json={"question": "Hej"})
+    chunks2 = b"".join(resp2.iter_bytes())
+
+    assert chunks1 == chunks2

@@ -1,6 +1,6 @@
 # app/chain/orchestrator.py
 
-from typing import List, Any
+from typing import List, Any, TypeVar, Generic
 from time import perf_counter
 from uuid import uuid4
 
@@ -8,17 +8,20 @@ from app.chain.contracts import PipelineStep
 from app.chain.errors import PipelineError
 from app.config import logger
 
+InputT = TypeVar("InputT")
+OutputT = TypeVar("OutputT")
 
-class PipelineOrchestrator:
+
+class PipelineOrchestrator(Generic[InputT, OutputT]):
     """
     Executes a sequence of pipeline steps with centralized error handling,
-    structured logging and tracing (trace_id + span_id).
+    structured logging and tracing.
     """
 
-    def __init__(self, steps: List[PipelineStep]):
+    def __init__(self, steps: List[PipelineStep[Any, Any]]):
         self.steps = steps
 
-    def run(self, input: Any) -> Any:
+    def run(self, input: InputT) -> OutputT:
         trace_id = str(uuid4())
         value: Any = input
 
@@ -87,4 +90,4 @@ class PipelineOrchestrator:
             "trace_id": trace_id,
         })
 
-        return value
+        return value  # type: ignore[return-value]

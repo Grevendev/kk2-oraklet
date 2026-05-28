@@ -1,6 +1,7 @@
 import os
 import pytest
 from fastapi.testclient import TestClient
+from app.schemas import AIResponse
 
 # Se till att TESTING-flaggan är satt innan app importeras
 os.environ["TESTING"] = "1"
@@ -25,3 +26,16 @@ def reset_state():
 @pytest.fixture
 def client():
     return TestClient(app)
+
+@pytest.fixture(autouse=True)
+def mock_pipeline_run(monkeypatch):
+    """Mockar hela AI‑pipeline så inga riktiga LLM‑anrop görs."""
+    def fake_run(question: str):
+        return AIResponse(
+            question=question,
+            answer="Detta är ett mockat AI‑svar.",
+            reasoning="Mockad reasoning.",
+            stats_used={"temp": {"mean": 10}}
+        )
+    monkeypatch.setattr("app.api.ai.pipeline.run", fake_run)
+    yield

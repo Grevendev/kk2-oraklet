@@ -5,7 +5,7 @@ from app.schemas import AIResponse
 
 os.environ["TESTING"] = "1"
 
-from app.main import app   # <-- AI importeras här
+from app.main import app
 from app.data import data_service
 from app.state import state
 
@@ -27,9 +27,16 @@ def client():
 
 
 @pytest.fixture(autouse=True)
-def mock_pipeline_run(monkeypatch):
-    """Mockar pipeline.run på rätt ställe."""
-    from app.api import ai   # <-- HÄR ligger pipeline-objektet
+def mock_pipeline_run(request, monkeypatch):
+    """
+    Global mock av pipeline.run, men DISABLAS om testet själv mockar pipeline.run.
+    """
+
+    # Om testet själv använder monkeypatch på pipeline.run → disable denna mock
+    if "pipeline.run" in request.fixturenames:
+        return
+
+    from app.api import ai
 
     def fake_run(question: str):
         return AIResponse(
@@ -40,4 +47,3 @@ def mock_pipeline_run(monkeypatch):
         )
 
     monkeypatch.setattr(ai.pipeline, "run", fake_run)
-    yield

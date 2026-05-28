@@ -23,10 +23,6 @@ import os
 
 router = APIRouter(prefix="/ai", tags=["AI"])
 
-# ------------------------------------------------------------
-# RATE LIMITER (REAL IN PROD, DISABLED IN TEST)
-# ------------------------------------------------------------
-
 TESTING = os.getenv("TESTING") == "1"
 
 if not TESTING:
@@ -40,9 +36,7 @@ else:
     limiter = NoOpLimiter()
 
 
-# ------------------------------------------------------------
-# CACHE STORE
-# ------------------------------------------------------------
+# cache: (dataset_fingerprint, question_hash) -> {body, etag}
 _cache_store: Dict[Tuple[str, str], Dict[str, object]] = {}
 
 AI_RATE_LIMIT = "10/minute"
@@ -50,11 +44,6 @@ AI_RATE_LIMIT = "10/minute"
 
 class AskRequest(BaseModel):
     question: str
-
-
-def _hash_stats(stats) -> str:
-    raw = repr(stats).encode("utf-8")
-    return hashlib.sha256(raw).hexdigest()
 
 
 def _hash_question(question: str) -> str:
@@ -65,10 +54,6 @@ def _compute_etag(payload: dict) -> str:
     raw = repr(payload).encode("utf-8")
     return hashlib.sha256(raw).hexdigest()
 
-
-# ------------------------------------------------------------
-# /ai/ask – JSON + ETag + caching + async pipeline
-# ------------------------------------------------------------
 
 @router.post("/ask", response_model=AIResponse)
 @limiter.limit(AI_RATE_LIMIT)
@@ -90,12 +75,10 @@ async def ask_ai(request: Request, payload: AskRequest):
     if state.stats is None:
         raise UserError("No dataset uploaded. Upload data before asking questions.")
 
-    # Cache key
     question_hash = _hash_question(payload.question)
     dataset_fp = data_service._data_fingerprint
     cache_key = (dataset_fp, question_hash)
 
-    # ETag check
     client_etag = request.headers.get("If-None-Match")
 
     cached = _cache_store.get(cache_key)
@@ -109,17 +92,16 @@ async def ask_ai(request: Request, payload: AskRequest):
         response.headers["ETag"] = etag
         return response
 
-    # Run pipeline with proper error handling
     try:
         result = await run_in_threadpool(pipeline.run, payload.question)
     except ValidationError as e:
+        # ska ge 400 i test_ai_ask_pipeline_validation_error
         raise UserError(str(e))
     except TimeoutError as e:
         raise SystemError(str(e))
     except RuntimeError as e:
         raise SystemError(str(e))
 
-    # Build dict INCLUDING answer + reasoning so ETag changes
     result_dict = {
         "question": result.question,
         "answer": result.answer,
@@ -127,7 +109,11 @@ async def ask_ai(request: Request, payload: AskRequest):
         "stats_used": result.stats_used,
     }
 
-    etag = _compute_etag(result_dict)
+    etag_payload = {
+        **result_dict,
+        "dataset_fingerprint": dataset_fp,
+    }
+    etag = _compute_etag(etag_payload)
 
     validated = AIResponse(**result_dict)
 
@@ -137,10 +123,6 @@ async def ask_ai(request: Request, payload: AskRequest):
     response.headers["ETag"] = etag
     return response
 
-
-# ------------------------------------------------------------
-# /ai/ask/stream – streaming endpoint
-# ------------------------------------------------------------
 
 @router.post("/ask/stream")
 @limiter.limit(AI_RATE_LIMIT)
@@ -195,7 +177,11 @@ async def ask_ai_stream(request: Request, payload: AskRequest):
             "stats_used": result.stats_used,
         }
 
-        etag = _compute_etag(result_dict)
+        etag_payload = {
+            **result_dict,
+            "dataset_fingerprint": dataset_fp,
+        }
+        etag = _compute_etag(etag_payload)
 
         validated = AIResponse(**result_dict)
         _cache_store[cache_key] = {"body": validated.model_dump(), "etag": etag}

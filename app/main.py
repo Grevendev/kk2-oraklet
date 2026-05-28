@@ -329,7 +329,7 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
             "error": str(e),
             "client_ip": request.client.host
         })
-        raise SystemError("Unexpected internal error") from e
+        raise SystemError("Unexpected internal error") 
 
     # -----------------------------------
     # SCHEMA FINGERPRINTING

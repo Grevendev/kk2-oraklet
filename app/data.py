@@ -201,6 +201,12 @@ def validate_and_clean_csv(file_bytes: bytes) -> pd.DataFrame:
     if df.empty:
         raise ValidationError("CSV file is empty or contains no rows.")
 
+    # -----------------------------------
+    # EARLY TYPE INFERENCE
+    # -----------------------------------
+    for col in df.columns:
+        df[col] = pd.to_numeric(df[col], errors="ignore")
+
     # Clean column names
     cleaned_columns = []
     for col in df.columns:
@@ -224,13 +230,13 @@ def validate_and_clean_csv(file_bytes: bytes) -> pd.DataFrame:
     ]
 
     for col in df.columns:
-        for char in dangerous_unicode:
-            df[col] = df[col].astype(str).str.replace(char, "", regex=False)
+        if df[col].dtype == object:
+            for char in dangerous_unicode:
+                df[col] = df[col].astype(str).str.replace(char, "", regex=False)
 
     for col in df.columns:
         if df[col].dtype == object:
             df[col] = df[col].str.replace(r"[\x00-\x1F\x7F]", "", regex=True)
-
 
     def escape_excel_formula(value):
         if isinstance(value, str) and value.startswith(("=", "+", "-", "@")):
@@ -240,8 +246,6 @@ def validate_and_clean_csv(file_bytes: bytes) -> pd.DataFrame:
     for col in df.columns:
         if df[col].dtype == object:
             df[col] = df[col].map(escape_excel_formula)
-
-
 
     safe_columns = []
     for col in df.columns:
@@ -305,18 +309,13 @@ def validate_and_clean_csv(file_bytes: bytes) -> pd.DataFrame:
     # -----------------------------------
     # ANALYSIS READINESS VALIDATION
     # -----------------------------------
-# -----------------------------------
-# ANALYSIS READINESS VALIDATION
-# -----------------------------------
-
     logger.warning({
         "event": "debug_dtypes_before_numeric_check",
-        "dtypes": {col: str(df[col].dtype) for col, dt in df.dtypes.items()},
+        "dtypes": {col: str(df[col].dtype) for col in df.columns},
         "head": df.head().to_dict()
     })
 
     numeric_cols = df.select_dtypes(include=["number"]).columns
-
 
     if df.shape[0] < 1:
         raise ValidationError("Dataset must contain at least one data row.")

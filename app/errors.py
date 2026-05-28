@@ -16,7 +16,10 @@ class UserError(Exception):
 
 class SystemError(Exception):
     """Raised when an unexpected internal error occurs."""
-    pass
+    def __init__(self, message="Unexpected internal error"):
+        super().__init__(message)
+        self.message = message
+
 
 
 # ---------------------------------------

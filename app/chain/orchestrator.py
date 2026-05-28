@@ -6,6 +6,7 @@ from uuid import uuid4
 
 from app.chain.contracts import PipelineStep
 from app.chain.errors import PipelineError
+from app.chain.metrics import PipelineMetrics
 from app.config import logger
 
 InputT = TypeVar("InputT")
@@ -15,20 +16,17 @@ OutputT = TypeVar("OutputT")
 class PipelineOrchestrator(Generic[InputT, OutputT]):
     """
     Executes a sequence of pipeline steps with centralized error handling,
-    structured logging, tracing and runtime schema validation.
+    structured logging, tracing, runtime schema validation and metrics.
     """
 
     def __init__(self, steps: List[PipelineStep[Any, Any]]):
         self.steps = steps
+        self.metrics = PipelineMetrics()
 
     # ----------------------------------------------------------------------
     # Runtime schema validation between steps
     # ----------------------------------------------------------------------
     def _validate_step_types(self, prev_step, next_step, value):
-        """
-        Validates that the output type of prev_step matches the input type of next_step.
-        """
-
         prev_bases = getattr(prev_step.__class__, "__orig_bases__", [])
         next_bases = getattr(next_step.__class__, "__orig_bases__", [])
 
@@ -47,7 +45,6 @@ class PipelineOrchestrator(Generic[InputT, OutputT]):
         prev_output_type = prev_generic[1]
         next_input_type = next_generic[0]
 
-        # Validate runtime type
         if not isinstance(value, next_input_type):
             raise PipelineError(
                 message=(
@@ -64,6 +61,8 @@ class PipelineOrchestrator(Generic[InputT, OutputT]):
     def run(self, input: InputT) -> OutputT:
         trace_id = str(uuid4())
         value: Any = input
+
+        self.metrics.pipeline_total_requests += 1
 
         logger.info({
             "event": "pipeline_start",
@@ -84,15 +83,18 @@ class PipelineOrchestrator(Generic[InputT, OutputT]):
             })
 
             try:
-                # Execute step
                 value = step.invoke(value)
 
-                # NEW: schema validation between steps
+                # Schema validation
                 if i < len(self.steps) - 1:
                     next_step = self.steps[i + 1]
                     self._validate_step_types(step, next_step, value)
 
                 duration_ms = (perf_counter() - start) * 1000
+
+                # Metrics
+                self.metrics.record_step_success(step_name, duration_ms)
+
                 logger.info({
                     "event": "pipeline_step_success",
                     "trace_id": trace_id,
@@ -103,6 +105,10 @@ class PipelineOrchestrator(Generic[InputT, OutputT]):
 
             except PipelineError:
                 duration_ms = (perf_counter() - start) * 1000
+
+                self.metrics.record_step_failure(step_name, duration_ms)
+                self.metrics.pipeline_total_failures += 1
+
                 logger.error({
                     "event": "pipeline_step_failure",
                     "trace_id": trace_id,
@@ -115,6 +121,10 @@ class PipelineOrchestrator(Generic[InputT, OutputT]):
 
             except Exception as exc:
                 duration_ms = (perf_counter() - start) * 1000
+
+                self.metrics.record_step_failure(step_name, duration_ms)
+                self.metrics.pipeline_total_failures += 1
+
                 logger.error({
                     "event": "pipeline_step_failure",
                     "trace_id": trace_id,
@@ -130,6 +140,8 @@ class PipelineOrchestrator(Generic[InputT, OutputT]):
                     step_name=step_name,
                     original_exception=exc,
                 ) from exc
+
+        self.metrics.pipeline_total_success += 1
 
         logger.info({
             "event": "pipeline_end",

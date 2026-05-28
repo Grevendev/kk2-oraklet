@@ -74,8 +74,11 @@ class PromptBuilder(PipelineStep[PromptBuilderInput, PromptBuilderOutput]):
 
 
 # ============================================================
-# Step 2 — LLMRunner (Circuit Breaker + Timeout + Async support)
+# Step 2 — LLMRunner (Circuit Breaker + Timeout + Retry + Async)
 # ============================================================
+
+from app.chain.retry_policy import RetryPolicy
+
 
 class LLMRunner(PipelineStep[PromptBuilderOutput, LLMRunnerOutput]):
 
@@ -84,6 +87,7 @@ class LLMRunner(PipelineStep[PromptBuilderOutput, LLMRunnerOutput]):
 
     def __init__(self):
         self.circuit = CircuitBreaker()
+        self.retry = RetryPolicy()
 
     @classmethod
     def _get_pipeline(cls):
@@ -111,9 +115,7 @@ class LLMRunner(PipelineStep[PromptBuilderOutput, LLMRunnerOutput]):
     def invoke(self, input: PromptBuilderOutput) -> LLMRunnerOutput:
         logger.info("LLMRunner invoked")
 
-        # Circuit Breaker: before call
         self.circuit.before_call()
-
         generator = self._get_pipeline()
 
         def run_model_sync():
@@ -130,28 +132,43 @@ class LLMRunner(PipelineStep[PromptBuilderOutput, LLMRunnerOutput]):
                 timeout=LLM_TIMEOUT_SECONDS
             )
 
-        try:
-            # Kör async timeout även om modellen är sync
-            result = asyncio.run(run_async())
+        # -------------------------------
+        # Retry loop
+        # -------------------------------
+        for attempt in range(self.retry.max_attempts):
+            try:
+                result = asyncio.run(run_async())
+                raw_text = result[0]["generated_text"]
 
-            raw_text = result[0]["generated_text"]
+                self.circuit.after_success()
+                return LLMRunnerOutput(raw_output=raw_text)
 
-            # Circuit Breaker: success
-            self.circuit.after_success()
+            except asyncio.TimeoutError:
+                # Timeout is NOT retriable
+                self.circuit.after_failure()
+                logger.error("LLMRunner timeout exceeded")
+                raise PipelineError(
+                    message=f"LLM timeout after {LLM_TIMEOUT_SECONDS} seconds",
+                    step_name="LLMRunner",
+                )
 
-            return LLMRunnerOutput(raw_output=raw_text)
+            except Exception as exc:
+                # Retry only if attempts remain
+                if attempt < self.retry.max_attempts - 1:
+                    delay = self.retry.get_delay(attempt)
+                    logger.warning({
+                        "event": "llm_retry",
+                        "attempt": attempt + 1,
+                        "delay": round(delay, 3),
+                        "error": str(exc),
+                    })
+                    time.sleep(delay)
+                    continue
 
-        except asyncio.TimeoutError:
-            self.circuit.after_failure()
-            logger.error("LLMRunner timeout exceeded")
-            raise PipelineError(
-                message=f"LLM timeout after {LLM_TIMEOUT_SECONDS} seconds",
-                step_name="LLMRunner",
-            )
+                # Final failure
+                self.circuit.after_failure()
+                raise
 
-        except Exception as exc:
-            self.circuit.after_failure()
-            raise
 
 
 

@@ -13,13 +13,25 @@ from app.state import state
 
 @pytest.fixture(autouse=True)
 def reset_state():
+    # Rensa dataservice
     data_service.clear()
     state.dataset = None
     state.stats = None
+
+    # Rensa AI-cache
+    from app.api import ai
+    ai._cache_store.clear()
+
     yield
+
+    # Rensa igen efter testet
     data_service.clear()
     state.dataset = None
     state.stats = None
+
+    from app.api import ai
+    ai._cache_store.clear()
+
 
 
 @pytest.fixture

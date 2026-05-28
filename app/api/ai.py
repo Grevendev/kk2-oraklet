@@ -13,7 +13,7 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 
 from app.state import state
-from app.chain.pipeline import pipeline
+from app.container import get_pipeline
 from app.config import logger
 from app.errors import ValidationError, UserError, SystemError
 from app.schemas import AIResponse

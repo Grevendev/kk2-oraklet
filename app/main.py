@@ -407,39 +407,20 @@ def get_stats(request: Request):
         "user_agent": request.headers.get("User-Agent", "unknown")
     })
 
-    try:
-        stats = data_service.get_stats()
-    except ValidationError as e:
-        raise UserError(str(e))
+    # Låt ValidationError bubbla upp
+    stats = data_service.get_stats()
 
     etag = data_service.get_stats_etag()
     client_etag = request.headers.get("If-None-Match")
 
     if client_etag == etag:
-        logger.info({
-            "event": "stats_not_modified",
-            "request_id": request.state.request_id,
-            "client_ip": request.client.host
-        })
         return Response(status_code=304)
 
     response = StatsResponse(stats=stats)
     response = JSONResponse(content=response.model_dump())
     response.headers["ETag"] = etag
-
-    logger.info({
-        "event": "stats_returned",
-        "request_id": request.state.request_id,
-        "client_ip": request.client.host,
-        "etag": etag
-    })
-
     return response
 
-
-# -----------------------------------
-# CSV DOWNLOAD
-# -----------------------------------
 @app.get("/data/download/csv")
 @limiter.limit("10/minute")
 def download_csv(request: Request):
@@ -449,17 +430,8 @@ def download_csv(request: Request):
         "client_ip": request.client.host
     })
 
-    try:
-        csv_bytes = data_service.get_csv()
-    except ValidationError as e:
-        raise UserError(str(e))
-
-    logger.info({
-        "event": "csv_download_success",
-        "request_id": request.state.request_id,
-        "client_ip": request.client.host,
-        "size_bytes": len(csv_bytes)
-    })
+    # Låt ValidationError bubbla upp
+    csv_bytes = data_service.get_csv()
 
     return StreamingResponse(
         iter([csv_bytes]),
@@ -467,10 +439,6 @@ def download_csv(request: Request):
         headers={"Content-Disposition": "attachment; filename=dataset.csv"}
     )
 
-
-# -----------------------------------
-# PARQUET DOWNLOAD
-# -----------------------------------
 @app.get("/data/download/parquet")
 @limiter.limit("10/minute")
 def download_parquet(request: Request):
@@ -480,20 +448,12 @@ def download_parquet(request: Request):
         "client_ip": request.client.host
     })
 
-    try:
-        parquet_bytes = data_service.get_parquet()
-    except ValidationError as e:
-        raise UserError(str(e))
-
-    logger.info({
-        "event": "parquet_download_success",
-        "request_id": request.state.request_id,
-        "client_ip": request.client.host,
-        "size_bytes": len(parquet_bytes)
-    })
+    # Låt ValidationError bubbla upp
+    parquet_bytes = data_service.get_parquet()
 
     return StreamingResponse(
         iter([parquet_bytes]),
         media_type="application/octet-stream",
         headers={"Content-Disposition": "attachment; filename=dataset.parquet"}
     )
+

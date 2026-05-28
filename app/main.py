@@ -267,8 +267,16 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
     except Exception:
         raise SystemError("Unexpected internal error")
 
-    
+    # -----------------------------------
+    # SCHEMA DRIFT CHECK (required by tests)
+    # -----------------------------------
+    if data_service._df is not None:
+        if data_service.is_schema_changed(df):
+            raise ValidationError("Schema drift detected")
 
+    # -----------------------------------
+    # STORE DATASET + UPDATE STATE
+    # -----------------------------------
     data_service.set_dataset(df)
     state.dataset = df
     state.stats = data_service.get_stats()
@@ -278,7 +286,6 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
         columns=list(df.columns),
         dtypes={col: str(dtype) for col, dtype in df.dtypes.items()}
     )
-
 
 # -----------------------------------
 # STATS ENDPOINT

@@ -92,7 +92,7 @@ async def ask_ai(request: Request, payload: AskRequest):
 
     stats_hash = _hash_stats(state.stats)
     question_hash = _hash_question(payload.question)
-    dataset_fp = data_service._schema_fingerprint
+    dataset_fp = data_service._data_fingerprint
     cache_key = (client_ip, dataset_fp, question_hash, stats_hash)
 
 
@@ -156,7 +156,7 @@ async def ask_ai_stream(request: Request, payload: AskRequest):
 
     stats_hash = _hash_stats(state.stats)
     question_hash = _hash_question(payload.question)
-    dataset_fp = data_service._schema_fingerprint
+    dataset_fp = data_service._data_fingerprint
     cache_key = (client_ip, dataset_fp, question_hash, stats_hash)
 
 

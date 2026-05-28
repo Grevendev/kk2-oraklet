@@ -70,30 +70,34 @@ class DataService:
         return hashlib.sha256(raw).hexdigest()
 
     def is_schema_changed(self, df: pd.DataFrame) -> bool:
-        """Return True if the new dataset differs in schema or data."""
+        """Return True if the new dataset schema differs from the stored one."""
         if self._schema_fingerprint is None:
             return False
 
-        import hashlib
-        new_fp = hashlib.sha256(df.to_csv(index=False).encode("utf-8")).hexdigest()
-        return new_fp != self._schema_fingerprint
+        new_schema_fp = self.compute_schema_fingerprint(df)
+        return new_schema_fp != self._schema_fingerprint
+
 
 
     # -----------------------------
     # Store dataset + compute fingerprint
     # -----------------------------
     def set_dataset(self, df: pd.DataFrame) -> None:
-        """Store the cleaned dataset, compute full-data fingerprint and generate Parquet bytes."""
+        """Store the cleaned dataset, compute fingerprints and generate Parquet bytes."""
         self._df = df
 
         # Reset stats cache
         self._stats_cache = None
         self._stats_timestamp = None
 
-        # Compute fingerprint based on full dataset (schema + data)
         import hashlib
+
+        # Full-data fingerprint (used for AI cache invalidation)
         csv_bytes = df.to_csv(index=False).encode("utf-8")
-        self._schema_fingerprint = hashlib.sha256(csv_bytes).hexdigest()
+        self._data_fingerprint = hashlib.sha256(csv_bytes).hexdigest()
+
+        # Schema-only fingerprint (used for schema drift detection)
+        self._schema_fingerprint = self.compute_schema_fingerprint(df)
 
         # Convert DataFrame to Parquet bytes
         table = pa.Table.from_pandas(df)
@@ -104,8 +108,10 @@ class DataService:
         logger.info(
             f"Dataset stored: {df.shape[0]} rows, {df.shape[1]} columns, "
             f"Parquet size: {len(self._parquet_bytes)} bytes, "
-            f"fingerprint: {self._schema_fingerprint}"
+            f"data_fingerprint: {self._data_fingerprint}, "
+            f"schema_fingerprint: {self._schema_fingerprint}"
         )
+
 
 
     # -----------------------------

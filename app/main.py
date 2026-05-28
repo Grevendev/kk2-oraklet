@@ -267,9 +267,7 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
     except Exception:
         raise SystemError("Unexpected internal error")
 
-    if data_service._df is not None:
-        if data_service.is_schema_changed(df):
-            raise UserError("Schema drift detected")
+    
 
     data_service.set_dataset(df)
     state.dataset = df

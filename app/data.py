@@ -234,7 +234,7 @@ def validate_and_clean_csv(file_bytes: bytes) -> pd.DataFrame:
             return "'" + value
         return value
 
-    df = df.applymap(escape_excel_formula)
+    df = df.apply(lambda col: col.map(escape_escel_formula))
 
     safe_columns = []
     for col in df.columns:

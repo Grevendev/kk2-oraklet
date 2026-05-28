@@ -234,7 +234,10 @@ def validate_and_clean_csv(file_bytes: bytes) -> pd.DataFrame:
             return "'" + value
         return value
 
-    df = df.apply(lambda col: col.map(escape_excel_formula))
+    for col in df.columns:
+        if df[col].dtype == object:
+            df[col] = df[col].map(escape_excel_formula)
+
 
 
     safe_columns = []
@@ -281,7 +284,7 @@ def validate_and_clean_csv(file_bytes: bytes) -> pd.DataFrame:
     for col in df.columns:
         if df[col].dtype == object:
             df[col] = df[col].astype(str).str.replace(",", ".", regex=False).str.replace(" ", "", regex=False)
-            df[col] = pd.to_numeric(df[col], errors="ignore")
+            df[col] = pd.to_numeric(df[col], errors="coerce")
 
     BOOL_TRUE = {"true", "yes", "1", "y", "ja"}
     BOOL_FALSE = {"false", "no", "0", "n", "nej"}

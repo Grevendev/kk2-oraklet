@@ -81,15 +81,17 @@ class DataService:
     # Store dataset + compute fingerprint
     # -----------------------------
     def set_dataset(self, df: pd.DataFrame) -> None:
-        """Store the cleaned dataset, compute schema fingerprint and generate Parquet bytes."""
+        """Store the cleaned dataset, compute full-data fingerprint and generate Parquet bytes."""
         self._df = df
 
         # Reset stats cache
         self._stats_cache = None
         self._stats_timestamp = None
 
-        # Compute schema fingerprint
-        self._schema_fingerprint = self.compute_schema_fingerprint(df)
+        # Compute fingerprint based on full dataset (schema + data)
+        import hashlib
+        csv_bytes = df.to_csv(index=False).encode("utf-8")
+        self._schema_fingerprint = hashlib.sha256(csv_bytes).hexdigest()
 
         # Convert DataFrame to Parquet bytes
         table = pa.Table.from_pandas(df)
@@ -100,8 +102,9 @@ class DataService:
         logger.info(
             f"Dataset stored: {df.shape[0]} rows, {df.shape[1]} columns, "
             f"Parquet size: {len(self._parquet_bytes)} bytes, "
-            f"schema_fingerprint: {self._schema_fingerprint}"
+            f"fingerprint: {self._schema_fingerprint}"
         )
+
 
     # -----------------------------
     # Get stats (with caching)

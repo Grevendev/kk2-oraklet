@@ -1,4 +1,5 @@
 # app/api/ai.py
+from app.data import data_service
 
 import hashlib
 from typing import Dict, Tuple, AsyncGenerator
@@ -91,7 +92,9 @@ async def ask_ai(request: Request, payload: AskRequest):
 
     stats_hash = _hash_stats(state.stats)
     question_hash = _hash_question(payload.question)
-    cache_key = (client_ip, question_hash, stats_hash)
+    dataset_fp = data_service._schema_fingerprint
+    cache_key = (client_ip, dataset_fp, question_hash, stats_hash)
+
 
     client_etag = request.headers.get("If-None-Match")
 
@@ -153,7 +156,9 @@ async def ask_ai_stream(request: Request, payload: AskRequest):
 
     stats_hash = _hash_stats(state.stats)
     question_hash = _hash_question(payload.question)
-    cache_key = (client_ip, question_hash, stats_hash)
+    dataset_fp = data_service._schema_fingerprint
+    cache_key = (client_ip, dataset_fp, question_hash, stats_hash)
+
 
     cached = _cache_store.get(cache_key)
 

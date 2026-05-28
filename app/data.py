@@ -70,12 +70,14 @@ class DataService:
         return hashlib.sha256(raw).hexdigest()
 
     def is_schema_changed(self, df: pd.DataFrame) -> bool:
-        """Return True if the new dataset schema differs from the stored one."""
+        """Return True if the new dataset differs in schema or data."""
         if self._schema_fingerprint is None:
             return False
 
-        new_fp = self.compute_schema_fingerprint(df)
+        import hashlib
+        new_fp = hashlib.sha256(df.to_csv(index=False).encode("utf-8")).hexdigest()
         return new_fp != self._schema_fingerprint
+
 
     # -----------------------------
     # Store dataset + compute fingerprint

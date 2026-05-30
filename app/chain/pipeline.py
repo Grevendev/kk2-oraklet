@@ -1,8 +1,7 @@
 # app/chain/pipeline.py
 #
 # Central pipeline assembly for the Oraklet AI system.
-# Denna version använder den generiska PipelineOrchestrator
-# istället för att kedja stegen manuellt.
+# Kör alla steg via PipelineOrchestrator.
 
 from app.chain.orchestrator import PipelineOrchestrator
 from app.chain.steps import (
@@ -40,20 +39,19 @@ class OrakletPipeline:
         else:
             stats_source = state.stats
 
-        # Säkerställ dict
         if not isinstance(stats_source, dict):
             stats_source = {}
 
-        # Bygg input till första steget
+        # Input till första steget
         prompt_input = PromptBuilderInput(
             question=question,
             stats=stats_source,
         )
 
-        # Kör hela kedjan via orchestratorn
+        # Kör hela kedjan
         parsed = self.orchestrator.run(prompt_input)
 
-        # Sätt originalfrågan på output
+        # Sätt originalfrågan
         parsed.question = question
 
         return parsed

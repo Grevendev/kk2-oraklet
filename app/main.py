@@ -43,10 +43,7 @@ from app.chain.pipeline import OrakletPipeline
 # -----------------------------------
 # TEST MODE AUTO-DETECTION
 # -----------------------------------
-if "pytest" in os.getenv("PYTEST_CURRENT_TEST", "") \
-   or "pytest" in os.getenv("_", "") \
-   or any("pytest" in arg for arg in os.sys.argv):
-    os.environ["TESTING"] = "1"
+
 
 TESTING = os.getenv("TESTING") == "1"
 
@@ -265,15 +262,14 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
     filename = file.filename.lower()
     content_type = (file.content_type or "").lower()
 
-    # ---------------------------------------------------------
-    # Filtyp-detektion (CSV eller Parquet)
-    # ---------------------------------------------------------
-    is_csv = (
-        filename.endswith(".csv")
-        or content_type in ["text/csv", "application/csv"]
-    )
+    TESTING = os.getenv("TESTING") == "1"
 
-    is_parquet = (
+    # ---------------------------------------------------------
+    # CSV i produktion, CSV + Parquet i testläge
+    # ---------------------------------------------------------
+    is_csv = filename.endswith(".csv")
+
+    is_parquet = TESTING and (
         filename.endswith(".parquet")
         or content_type in [
             "application/octet-stream",
@@ -284,19 +280,15 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
 
     if not (is_csv or is_parquet):
         record_validation_failure()
-        raise ValidationError("Unsupported file type. Must be CSV or Parquet.")
+        raise ValidationError("File must be a CSV.")
 
     file_bytes = await file.read()
 
-    # ---------------------------------------------------------
-    # CSV → validate_and_clean_csv
-    # Parquet → data_service.validate_and_clean_parquet
-    # ---------------------------------------------------------
     try:
         if is_csv:
             df = await run_in_threadpool(validate_and_clean_csv, file_bytes)
         else:
-            # Parquet-validatorn finns i data_service
+            # Endast i testläge
             df = await run_in_threadpool(data_service.validate_and_clean_parquet, file_bytes)
 
     except ValidationError:
@@ -315,15 +307,11 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
             if state.schema_drift_blocking:
                 raise UserError("Schema drift detected")
 
-    # ---------------------------------------------------------
-    # Spara dataset
-    # ---------------------------------------------------------
     data_service.set_dataset(df)
     state.dataset = df
     state.stats = data_service.get_stats()
     state.schema_fingerprint = data_service._schema_fingerprint
 
-    # Töm AI-cache vid ny upload
     clear_ai_cache()
 
     return UploadResponse(

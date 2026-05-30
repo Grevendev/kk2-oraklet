@@ -21,6 +21,22 @@ class CircuitBreaker:
         self.state = "closed"  # closed, open, half-open
         self.opened_at = 0.0
 
+    # ---------------------------------------------------------
+    # Compatibility with test suite
+    # ---------------------------------------------------------
+    @property
+    def max_failures(self) -> int:
+        """Tests expect this attribute."""
+        return self.failure_threshold
+
+    @property
+    def failure_count(self) -> int:
+        """Tests expect this attribute."""
+        return self.failures
+
+    # ---------------------------------------------------------
+    # Internal mechanics
+    # ---------------------------------------------------------
     def _trip(self) -> None:
         self.state = "open"
         self.opened_at = time.time()

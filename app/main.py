@@ -34,12 +34,15 @@ from app.schemas import UploadResponse, StatsResponse
 from app.config import logger
 from app.state import state
 
+# ---------------------------------------------------------
+# IMPORTERA DIN RIKTIGA PIPELINE
+# ---------------------------------------------------------
+from app.chain.orchestrator import OrakletPipeline
+
 
 # -----------------------------------
 # TEST MODE AUTO-DETECTION
 # -----------------------------------
-# Pytest always sets PYTEST_CURRENT_TEST
-# Force test mode when pytest is running (works with uv, Windows, Linux, macOS)
 if "pytest" in os.getenv("PYTEST_CURRENT_TEST", "") \
    or "pytest" in os.getenv("_", "") \
    or any("pytest" in arg for arg in os.sys.argv):
@@ -93,6 +96,11 @@ def record_validation_failure():
 @app.on_event("startup")
 async def on_startup():
     logger.info({"event": "server_startup"})
+
+    # ---------------------------------------------------------
+    # SÄTT DIN RIKTIGA PIPELINE I GLOBAL STATE
+    # ---------------------------------------------------------
+    state.pipeline = OrakletPipeline()
 
 
 @app.on_event("shutdown")

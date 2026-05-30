@@ -19,6 +19,12 @@ class GlobalState:
         # AI pipeline / data service
         self.data_service = data_service
 
+        # ---------------------------------------------------------
+        # LÄGG TILL DETTA (saknades i din arkitektur)
+        # ---------------------------------------------------------
+        self.pipeline = None
+        # ---------------------------------------------------------
+
     def reset(self):
         """
         Reset all global ingestion + AI state.
@@ -37,11 +43,12 @@ class GlobalState:
 
 state = GlobalState()
 
+
 class CircuitBreaker:
     def __init__(self):
         self.max_failures = 5
         self.failure_count = 0
         self.state = "closed"
 
-breaker = CircuitBreaker()
 
+breaker = CircuitBreaker()

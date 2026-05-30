@@ -97,9 +97,8 @@ class PipelineOrchestrator(Generic[InputT, OutputT]):
                 # If parse_output is monkeypatched → skip remaining steps
                 # AND return immediately
                 # ------------------------------------------------------------
-                if self.parse_output is not PipelineOrchestrator.parse_output:
+                if self.parse_output.__func__ is not PipelineOrchestrator.parse_output:
                     return self.parse_output(value)
-
 
                 # Schema validation
                 if i < len(self.steps) - 1:

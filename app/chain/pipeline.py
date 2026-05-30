@@ -27,15 +27,27 @@ class OrakletPipeline:
         self.llm_runner = LLMRunner()
         self.parser = ResponseParser()
 
-    def run(self, question: str):
+    def run(self, question: str, dataset=None):
         """
         Executes the full chain and returns ResponseParserOutput.
         """
 
+        # Determine stats source
+        stats_source = None
+
+        if dataset and hasattr(dataset, "stats"):
+            stats_source = dataset.stats
+        else:
+            stats_source = state.stats
+
+        # Ensure stats is always a dict
+        if not isinstance(stats_source, dict):
+            stats_source = {}
+
         # Step 1: Build prompt
         prompt_input = PromptBuilderInput(
             question=question,
-            stats=state.stats
+            stats=stats_source
         )
         prompt_output = self.prompt_builder.invoke(prompt_input)
 

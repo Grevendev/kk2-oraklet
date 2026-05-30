@@ -36,10 +36,13 @@ from app.state import state
 
 
 # -----------------------------------
-# ENV FLAG FOR TEST MODE
+# TEST MODE AUTO-DETECTION
 # -----------------------------------
+# Pytest always sets PYTEST_CURRENT_TEST
+if "PYTEST_CURRENT_TEST" in os.environ:
+    os.environ["TESTING"] = "1"
+
 TESTING = os.getenv("TESTING") == "1"
-os.environ["TESTING"] = "1"
 
 
 app = FastAPI()
@@ -62,7 +65,6 @@ CIRCUIT_BREAKER_DURATION = 30
 
 
 def record_validation_failure():
-    """Record a validation failure and possibly open the circuit."""
     global circuit_open_until
     now = time.time()
     validation_failures.append(now)
@@ -109,11 +111,10 @@ app.add_middleware(
 
 
 # -----------------------------------
-# RATE LIMITER (REAL IN PROD, DISABLED IN TEST)
+# RATE LIMITER (DISABLED IN TEST MODE)
 # -----------------------------------
 if not TESTING:
     limiter = Limiter(key_func=get_remote_address)
-    app.state.limiter = limiter
 else:
     class NoOpLimiter:
         def limit(self, *args, **kwargs):
@@ -121,7 +122,8 @@ else:
                 return func
             return decorator
     limiter = NoOpLimiter()
-    app.state.limiter = limiter
+
+app.state.limiter = limiter
 
 
 # -----------------------------------
@@ -156,7 +158,7 @@ app.add_middleware(RequestIDMiddleware)
 
 
 # -----------------------------------
-# GLOBAL RATE ANOMALY DETECTION
+# GLOBAL RATE ANOMALY DETECTION (DISABLED IN TEST MODE)
 # -----------------------------------
 class GlobalRateAnomalyMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
@@ -269,16 +271,10 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
     except Exception:
         raise SystemError("Unexpected internal error")
 
-    # -----------------------------------
-    # SCHEMA DRIFT CHECK (required by tests)
-    # -----------------------------------
     if data_service._df is not None:
         if data_service.is_schema_changed(df):
             raise UserError("Schema drift detected")
 
-    # -----------------------------------
-    # STORE DATASET + UPDATE STATE
-    # -----------------------------------
     data_service.set_dataset(df)
     state.dataset = df
     state.stats = data_service.get_stats()
@@ -288,6 +284,7 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
         columns=list(df.columns),
         dtypes={col: str(dtype) for col, dtype in df.dtypes.items()}
     )
+
 
 # -----------------------------------
 # STATS ENDPOINT

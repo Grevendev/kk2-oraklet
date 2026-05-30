@@ -75,7 +75,7 @@ class PromptBuilder(PipelineStep[PromptBuilderInput, PromptBuilderOutput]):
 
 
 # ============================================================
-# Step 2 — LLMRunner
+# Step 2 — LLLMRunner
 # ============================================================
 
 class LLMRunner(PipelineStep[PromptBuilderOutput, LLMRunnerOutput]):
@@ -116,30 +116,37 @@ class LLMRunner(PipelineStep[PromptBuilderOutput, LLMRunnerOutput]):
                     )
         return cls._pipeline
 
-    def invoke(self, input: PromptBuilderOutput) -> LLMRunnerOutput:
-        logger.info("LLMRunner invoked")
-
-        self.circuit.before_call()
+    # ------------------------------------------------------------
+    # NEW: Method required by retry-policy tests
+    # ------------------------------------------------------------
+    async def _run_model_async(self, prompt: str):
         generator = self._get_pipeline()
 
         def run_model_sync():
             return generator(
-                input.prompt,
+                prompt,
                 max_new_tokens=200,
                 temperature=0.3,
                 do_sample=False
             )
 
-        async def run_async():
-            return await run_with_timeout(
-                lambda: run_model_sync(),
-                timeout=LLM_TIMEOUT_SECONDS
-            )
+        return await run_with_timeout(
+            lambda: run_model_sync(),
+            timeout=LLM_TIMEOUT_SECONDS
+        )
+
+    # ------------------------------------------------------------
+    # invoke() now uses _run_model_async()
+    # ------------------------------------------------------------
+    def invoke(self, input: PromptBuilderOutput) -> LLMRunnerOutput:
+        logger.info("LLMRunner invoked")
+
+        self.circuit.before_call()
 
         # Retry loop
         for attempt in range(self.retry.max_attempts):
             try:
-                result = asyncio.run(run_async())
+                result = asyncio.run(self._run_model_async(input.prompt))
                 raw_text = result[0]["generated_text"]
 
                 self.circuit.after_success()

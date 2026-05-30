@@ -12,7 +12,6 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 
 from app.state import state
-from app.container import get_pipeline
 from app.config import logger
 from app.errors import ValidationError, UserError, SystemError
 from app.schemas import AIResponse
@@ -38,8 +37,6 @@ pipeline = AIPipelineStub()
 
 
 router = APIRouter(prefix="/ai", tags=["AI"])
-
-TESTING = os.getenv("TESTING") == "1"
 
 if not TESTING:
     limiter = Limiter(key_func=get_remote_address)
@@ -71,6 +68,9 @@ def _compute_etag(payload: dict) -> str:
     return hashlib.sha256(raw).hexdigest()
 
 
+# ============================================================================
+# /ai/ask
+# ============================================================================
 @router.post("/ask", response_model=AIResponse)
 @limiter.limit(AI_RATE_LIMIT)
 async def ask_ai(request: Request, payload: AskRequest):
@@ -108,18 +108,29 @@ async def ask_ai(request: Request, payload: AskRequest):
         response.headers["ETag"] = etag
         return response
 
+    # ----------------------------------------------------------------------
+    # KORREKT pipeline-anrop (fungerar för både OrakletPipeline och Orchestrator)
+    # ----------------------------------------------------------------------
     try:
-        # ALLTID skicka state som dataset
+        # OrakletPipeline.run(question, state)
         result = await run_in_threadpool(pipeline.run, payload.question, state)
+
     except TypeError:
-        # fallback skickar OCKSÅ state
-        result = await run_in_threadpool(pipeline.run, payload.question, state)
+        # PipelineOrchestrator.run(input_dict)
+        pb_input = {
+            "question": payload.question,
+            "stats": state.stats
+        }
+        result = await run_in_threadpool(pipeline.run, pb_input)
+
     except ValidationError as e:
         raise UserError(str(e))
     except TimeoutError as e:
         raise SystemError(str(e))
     except RuntimeError as e:
         raise SystemError(str(e))
+
+    # ----------------------------------------------------------------------
 
     result_dict = {
         "question": result.question,
@@ -143,6 +154,9 @@ async def ask_ai(request: Request, payload: AskRequest):
     return response
 
 
+# ============================================================================
+# /ai/ask/stream
+# ============================================================================
 @router.post("/ask/stream")
 @limiter.limit(AI_RATE_LIMIT)
 async def ask_ai_stream(request: Request, payload: AskRequest):
@@ -177,12 +191,19 @@ async def ask_ai_stream(request: Request, payload: AskRequest):
                 yield answer[i:i+256].encode("utf-8")
             return
 
+        # ------------------------------------------------------------------
+        # KORREKT pipeline-anrop (samma logik som /ask)
+        # ------------------------------------------------------------------
         try:
-            # ALLTID skicka state som dataset
             result = await run_in_threadpool(pipeline.run, payload.question, state)
+
         except TypeError:
-            # fallback skickar OCKSÅ state
-            result = await run_in_threadpool(pipeline.run, payload.question, state)
+            pb_input = {
+                "question": payload.question,
+                "stats": state.stats
+            }
+            result = await run_in_threadpool(pipeline.run, pb_input)
+
         except ValidationError as e:
             yield f"Validation error: {str(e)}".encode("utf-8")
             return
@@ -192,6 +213,7 @@ async def ask_ai_stream(request: Request, payload: AskRequest):
         except RuntimeError as e:
             yield f"System error: {str(e)}".encode("utf-8")
             return
+        # ------------------------------------------------------------------
 
         result_dict = {
             "question": result.question,

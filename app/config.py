@@ -56,3 +56,6 @@ LLM_TIMEOUT_SECONDS = 20
 
 # Maximum allowed prompt length (characters)
 MAX_PROMPT_LENGTH = 8000
+
+
+STATS_CACHE_TTL_SECONDS = 60  # eller den TTL du använder i din cache

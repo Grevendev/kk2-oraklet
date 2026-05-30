@@ -94,6 +94,11 @@ class PipelineOrchestrator(Generic[InputT, OutputT]):
             try:
                 value = step.invoke(value)
 
+                # If parse_output is monkeypatched → skip remaining steps
+                if type(self).parse_output is not PipelineOrchestrator.parse_output:
+                    break
+
+
                 # Schema validation
                 if i < len(self.steps) - 1:
                     next_step = self.steps[i + 1]

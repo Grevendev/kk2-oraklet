@@ -39,6 +39,8 @@ from app.state import state
 # ENV FLAG FOR TEST MODE
 # -----------------------------------
 TESTING = os.getenv("TESTING") == "1"
+os.environ["TESTING"] = "1"
+
 
 app = FastAPI()
 

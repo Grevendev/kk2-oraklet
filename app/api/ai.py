@@ -18,6 +18,7 @@ from app.errors import ValidationError, UserError, SystemError
 from app.schemas import AIResponse
 
 import os
+TESTING = os.getenv("TESTING") == "1"
 
 
 # ---------------------------------------------------------------------------

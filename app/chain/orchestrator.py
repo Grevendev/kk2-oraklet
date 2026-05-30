@@ -23,6 +23,15 @@ class PipelineOrchestrator(Generic[InputT, OutputT]):
         self.steps = steps
         self.metrics = PipelineMetrics()
 
+    # ------------------------------------------------------------
+    # NEW: Required by retry-policy tests
+    # ------------------------------------------------------------
+    def parse_output(self, output: Any) -> Any:
+        """
+        Default output parser. Tests monkeypatch this method.
+        """
+        return output
+
     # ----------------------------------------------------------------------
     # Runtime schema validation between steps
     # ----------------------------------------------------------------------

@@ -7,6 +7,8 @@ from collections import deque
 import math
 
 import pandas as pd
+import pyarrow as pa
+import pyarrow.parquet as pq
 
 from fastapi import FastAPI, UploadFile, File, HTTPException, Request
 from fastapi.responses import StreamingResponse, JSONResponse
@@ -41,13 +43,8 @@ from app.chain.pipeline import OrakletPipeline
 
 
 # -----------------------------------
-# TEST MODE AUTO-DETECTION
+# TEST MODE
 # -----------------------------------
-if "pytest" in os.getenv("PYTEST_CURRENT_TEST", "") \
-   or "pytest" in os.getenv("_", "") \
-   or any("pytest" in arg for arg in os.sys.argv):
-    os.environ["TESTING"] = "1"
-
 TESTING = os.getenv("TESTING") == "1"
 
 
@@ -265,25 +262,24 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
     filename = file.filename.lower()
     content_type = (file.content_type or "").lower()
 
-    TESTING = os.getenv("TESTING") == "1"
-
     # ---------------------------------------------------------
-    # CSV i produktion, CSV + Parquet i testläge
+    # MIME / extension guard
     # ---------------------------------------------------------
     is_csv = filename.endswith(".csv")
-
-    is_parquet = TESTING and (
-        filename.endswith(".parquet")
-        or content_type in [
-            "application/octet-stream",
-            "application/x-parquet",
-            "application/vnd.apache.parquet"
-        ]
-    )
+    is_parquet = filename.endswith(".parquet")
 
     if not (is_csv or is_parquet):
         record_validation_failure()
-        raise ValidationError("File must be a CSV.")
+        raise ValidationError("Unsupported file type.")
+
+    # Parquet MIME check
+    if is_parquet and content_type not in [
+        "application/octet-stream",
+        "application/x-parquet",
+        "application/vnd.apache.parquet"
+    ]:
+        record_validation_failure()
+        raise ValidationError("Invalid Parquet MIME type.")
 
     file_bytes = await file.read()
 
@@ -291,20 +287,19 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
         if is_csv:
             df = await run_in_threadpool(validate_and_clean_csv, file_bytes)
         else:
-            # Endast i testläge
             df = await run_in_threadpool(data_service.validate_and_clean_parquet, file_bytes)
 
     except ValidationError:
         record_validation_failure()
         raise
+
+    
+
     except UserError:
         raise
-    except (pa.ArrowInvalid, pa.ArrowTypeError) as e:
-        record_validation_failure()
-        raise ValidationError(str(e))
+
     except Exception:
         raise SystemError("Unexpected internal error")
-        
 
     # ---------------------------------------------------------
     # Schema drift
@@ -326,7 +321,6 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
         columns=list(df.columns),
         dtypes={col: str(dtype) for col, dtype in df.dtypes.items()}
     )
-
 
 
 # -----------------------------------

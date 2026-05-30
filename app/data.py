@@ -12,32 +12,25 @@ from app.config import logger
 from app.errors import ValidationError
 
 
+# ============================================================
+# DataService
+# ============================================================
 class DataService:
-    """
-    Service responsible for storing, validating and converting datasets.
-    Stores both DataFrame and Parquet bytes for optimal performance.
-    Includes production-grade statistics caching and schema fingerprinting.
-    """
-
-    STATS_TTL_SECONDS = 60  # Cache stats for 1 minute
+    STATS_TTL_SECONDS = 60
 
     def __init__(self):
         self._df: Optional[pd.DataFrame] = None
         self._parquet_bytes: Optional[bytes] = None
 
-        # Stats cache
         self._stats_cache: Optional[Dict[str, Any]] = None
         self._stats_timestamp: Optional[datetime] = None
 
-        # Schema fingerprint
         self._schema_fingerprint: Optional[str] = None
-
-        # Full data fingerprint
         self._data_fingerprint: Optional[str] = None
 
-    # -----------------------------
+    # ---------------------------------------------------------
     # Cleanup
-    # -----------------------------
+    # ---------------------------------------------------------
     def clear(self):
         self._df = None
         self._parquet_bytes = None
@@ -46,28 +39,10 @@ class DataService:
         self._schema_fingerprint = None
         self._data_fingerprint = None
 
-    # -----------------------------
-    # ETag generation
-    # -----------------------------
-    def get_stats_etag(self) -> str:
-        """Return a stable ETag hash for the current stats cache."""
-        if self._stats_cache is None:
-            return ""
-
-        payload = {
-            "rows": self._stats_cache["_metadata"]["rows"],
-            "columns": self._stats_cache["_metadata"]["columns"],
-            "generated_at": self._stats_cache["_metadata"]["generated_at"],
-        }
-
-        raw = json.dumps(payload, sort_keys=True).encode("utf-8")
-        return hashlib.sha256(raw).hexdigest()
-
-    # -----------------------------
-    # Schema fingerprinting
-    # -----------------------------
+    # ---------------------------------------------------------
+    # Schema fingerprint
+    # ---------------------------------------------------------
     def compute_schema_fingerprint(self, df: pd.DataFrame) -> str:
-        """Compute a stable fingerprint for the dataset schema."""
         schema = {
             "columns": list(df.columns),
             "dtypes": {col: str(df[col].dtype) for col in df.columns}
@@ -76,53 +51,34 @@ class DataService:
         return hashlib.sha256(raw).hexdigest()
 
     def is_schema_changed(self, df: pd.DataFrame) -> bool:
-        """Return True if the new dataset schema differs from the stored one."""
         if self._schema_fingerprint is None:
             return False
+        return self.compute_schema_fingerprint(df) != self._schema_fingerprint
 
-        new_schema_fp = self.compute_schema_fingerprint(df)
-        return new_schema_fp != self._schema_fingerprint
-
-    # -----------------------------
-    # Store dataset + compute fingerprint
-    # -----------------------------
+    # ---------------------------------------------------------
+    # Store dataset
+    # ---------------------------------------------------------
     def set_dataset(self, df: pd.DataFrame) -> None:
-        """Store the cleaned dataset, compute fingerprints and generate Parquet bytes."""
         self._df = df
-
-        # Reset stats cache
         self._stats_cache = None
         self._stats_timestamp = None
 
-        # Full-data fingerprint (used for AI cache invalidation)
         csv_bytes = df.to_csv(index=False).encode("utf-8")
         self._data_fingerprint = hashlib.sha256(csv_bytes).hexdigest()
-
-        # Schema-only fingerprint (used for schema drift detection)
         self._schema_fingerprint = self.compute_schema_fingerprint(df)
 
-        # Convert DataFrame to Parquet bytes
         table = pa.Table.from_pandas(df)
         sink = pa.BufferOutputStream()
         pq.write_table(table, sink)
         self._parquet_bytes = sink.getvalue().to_pybytes()
 
-        logger.info(
-            f"Dataset stored: {df.shape[0]} rows, {df.shape[1]} columns, "
-            f"Parquet size: {len(self._parquet_bytes)} bytes, "
-            f"data_fingerprint: {self._data_fingerprint}, "
-            f"schema_fingerprint: {self._schema_fingerprint}"
-        )
-
-    # -----------------------------
-    # Get stats (with caching)
-    # -----------------------------
+    # ---------------------------------------------------------
+    # Stats
+    # ---------------------------------------------------------
     def get_stats(self) -> Dict[str, Any]:
-        """Return cached stats or compute new ones."""
         if self._df is None:
             raise ValidationError("No dataset uploaded yet.")
 
-        # Return cached stats if still valid
         if (
             self._stats_cache is not None
             and self._stats_timestamp is not None
@@ -130,59 +86,141 @@ class DataService:
         ):
             return self._stats_cache
 
-        # Compute new stats
         stats: Dict[str, Any] = {}
         for col in self._df.select_dtypes(include=["number"]).columns:
-            series = self._df[col]
+            s = self._df[col]
             stats[col] = {
-                "mean": float(series.mean()),
-                "min": float(series.min()),
-                "max": float(series.max()),
-                "std": float(series.std()),
-                "count": int(series.count()),
+                "mean": float(s.mean()),
+                "min": float(s.min()),
+                "max": float(s.max()),
+                "std": float(s.std()),
+                "count": int(s.count()),
             }
 
-        # Metadata
-        metadata = {
+        stats["_metadata"] = {
             "rows": int(self._df.shape[0]),
             "columns": int(self._df.shape[1]),
             "generated_at": datetime.utcnow().isoformat(),
             "fingerprint": self._data_fingerprint,
         }
 
-        stats["_metadata"] = metadata
-
-        # Cache
         self._stats_cache = stats
         self._stats_timestamp = datetime.utcnow()
-
         return stats
 
-    # -----------------------------
-    # Get CSV bytes
-    # -----------------------------
+    # ---------------------------------------------------------
+    # CSV / Parquet getters
+    # ---------------------------------------------------------
     def get_csv(self) -> bytes:
         if self._df is None:
             raise ValidationError("No dataset uploaded yet.")
         return self._df.to_csv(index=False).encode("utf-8")
 
-    # -----------------------------
-    # Get Parquet bytes
-    # -----------------------------
     def get_parquet(self) -> bytes:
         if self._parquet_bytes is None:
             raise ValidationError("No dataset uploaded yet.")
         return self._parquet_bytes
 
+    # ---------------------------------------------------------
+    # PARQUET VALIDATOR (INSIDE CLASS)
+    # ---------------------------------------------------------
+    def validate_and_clean_parquet(self, file_bytes: bytes) -> pd.DataFrame:
 
-# -----------------------------
-# CSV validation
-# -----------------------------
+        if not file_bytes or len(file_bytes) < 4:
+            raise ValidationError("Invalid Parquet file: too small.")
+
+        if file_bytes[:4] != b"PAR1":
+            raise ValidationError("Invalid Parquet magic bytes.")
+
+        # ---------------------------------------------------------
+        # READ METADATA FIRST (avoid PyArrow auto-errors)
+        # ---------------------------------------------------------
+        try:
+            parquet_file = pq.ParquetFile(pa.BufferReader(file_bytes))
+        except (pa.ArrowInvalid, pa.ArrowTypeError) as e:
+            raise ValidationError("Invalid Parquet data: " + str(e))
+
+        schema = parquet_file.schema_arrow
+
+        # ---------------------------------------------------------
+        # Duplicate column detection BEFORE reading table
+        # ---------------------------------------------------------
+        names = schema.names
+        if len(names) != len(set(names)):
+            raise ValidationError("Duplicate columns detected.")
+
+        # ---------------------------------------------------------
+        # READ TABLE (catch mixed datatype errors)
+        # ---------------------------------------------------------
+        try:
+            table = parquet_file.read()
+        except (pa.ArrowInvalid, pa.ArrowTypeError) as e:
+            raise ValidationError("Invalid Parquet data: " + str(e))
+
+        df = table.to_pandas()
+
+        # ---------------------------------------------------------
+        # Column name validation
+        # ---------------------------------------------------------
+        cleaned = []
+        for col in df.columns:
+            if col is None or str(col).strip() == "":
+                raise ValidationError("Empty or null column name.")
+            cleaned.append(str(col).strip())
+        df.columns = cleaned
+
+        # ---------------------------------------------------------
+        # Nested list type consistency
+        # ---------------------------------------------------------
+        for col in df.columns:
+            s = df[col]
+            if s.apply(lambda x: isinstance(x, list)).any():
+                types = set()
+                for v in s:
+                    if isinstance(v, list):
+                        for item in v:
+                            types.add(type(item))
+                if len(types) > 1:
+                    raise ValidationError("Nested list contains mixed types.")
+
+        # ---------------------------------------------------------
+        # Mixed numeric + string
+        # ---------------------------------------------------------
+        for col in df.columns:
+            s = df[col]
+            if s.apply(lambda x: isinstance(x, (int, float))).any() and \
+               s.apply(lambda x: isinstance(x, str)).any():
+                raise ValidationError("Mixed numeric and string values.")
+
+        # Bool + int → promote to int
+        for col in df.columns:
+            s = df[col]
+            if s.apply(lambda x: isinstance(x, bool)).any() and \
+               s.apply(lambda x: isinstance(x, int)).any():
+                df[col] = s.astype(int)
+
+        # Int + float → promote to float
+        for col in df.columns:
+            s = df[col]
+            if s.apply(lambda x: isinstance(x, int)).any() and \
+               s.apply(lambda x: isinstance(x, float)).any():
+                df[col] = s.astype(float)
+
+        # Nullability
+        for col in df.columns:
+            if df[col].isna().all():
+                raise ValidationError(f"Column '{col}' contains only null values.")
+
+        return df
+
+
+# ============================================================
+# CSV VALIDATOR (TOP LEVEL)
+# ============================================================
 def validate_and_clean_csv(file_bytes: bytes) -> pd.DataFrame:
     """Validate CSV content, enforce size limits, encoding, clean column names,
     auto-detect delimiter and auto-convert types."""
 
-    # Fix. Empty file should raise ValidationError
     if not file_bytes or not file_bytes.strip():
         raise ValidationError("CSV file is empty.")
 
@@ -191,15 +229,11 @@ def validate_and_clean_csv(file_bytes: bytes) -> pd.DataFrame:
     MIN_NUMERIC_COLUMNS = 1
 
     size_mb = len(file_bytes) / (1024 * 1024)
-
     if size_mb > MAX_SIZE_MB:
         raise ValidationError(f"File exceeds maximum allowed size of {MAX_SIZE_MB} MB.")
 
-    # -----------------------------------
-    # AUTO-DETECT DELIMITER
-    # -----------------------------------
+    # Detect delimiter
     sample = file_bytes[:2048].decode("utf-8", errors="ignore")
-
     delimiter = ","
     if sample.count(";") > sample.count(","):
         delimiter = ";"
@@ -208,7 +242,6 @@ def validate_and_clean_csv(file_bytes: bytes) -> pd.DataFrame:
 
     logger.info(f"Detected delimiter: '{delimiter}'")
 
-    # Try reading with UTF-8 first, fallback to latin-1
     try:
         df = pd.read_csv(pd.io.common.BytesIO(file_bytes), encoding="utf-8", delimiter=delimiter)
     except UnicodeDecodeError:
@@ -217,11 +250,8 @@ def validate_and_clean_csv(file_bytes: bytes) -> pd.DataFrame:
     if df.empty:
         raise ValidationError("CSV file is empty or contains no rows.")
 
-    # -----------------------------------
-    # EARLY TYPE INFERENCE
-    # -----------------------------------
+    # Early numeric inference
     for col in df.columns:
-        # Only convert if column is numeric-like
         if df[col].astype(str).str.match(r"^-?\d+(\.\d+)?$").all():
             df[col] = pd.to_numeric(df[col], errors="coerce")
 
@@ -238,9 +268,7 @@ def validate_and_clean_csv(file_bytes: bytes) -> pd.DataFrame:
     # Drop fully empty columns
     df = df.dropna(axis=1, how="all")
 
-    # -----------------------------------
-    # INPUT SANITIZATION
-    # -----------------------------------
+    # Dangerous unicode removal
     dangerous_unicode = [
         "\u202E", "\u202D",
         "\u2066", "\u2067", "\u2068", "\u2069",
@@ -252,10 +280,12 @@ def validate_and_clean_csv(file_bytes: bytes) -> pd.DataFrame:
             for char in dangerous_unicode:
                 df[col] = df[col].astype(str).str.replace(char, "", regex=False)
 
+    # Control characters
     for col in df.columns:
         if df[col].dtype == object:
             df[col] = df[col].str.replace(r"[\x00-\x1F\x7F]", "", regex=True)
 
+    # Excel formula escaping
     def escape_excel_formula(value):
         if isinstance(value, str) and value.startswith(("=", "+", "-", "@")):
             return "'" + value
@@ -265,6 +295,7 @@ def validate_and_clean_csv(file_bytes: bytes) -> pd.DataFrame:
         if df[col].dtype == object:
             df[col] = df[col].map(escape_excel_formula)
 
+    # Clean column names again
     safe_columns = []
     for col in df.columns:
         col = col.replace("=", "").replace("+", "").replace("-", "").replace("@", "")
@@ -273,9 +304,7 @@ def validate_and_clean_csv(file_bytes: bytes) -> pd.DataFrame:
 
     df.columns = safe_columns
 
-    # -----------------------------------
-    # MEMORY USAGE GUARD — STEP 2
-    # -----------------------------------
+    # Memory guard
     max_rows = 5_000_000
     max_columns = 200
     max_memory_bytes = 500 * 1024 * 1024
@@ -284,23 +313,12 @@ def validate_and_clean_csv(file_bytes: bytes) -> pd.DataFrame:
 
     if df.shape[0] > max_rows:
         raise ValidationError(f"Dataset has too many rows ({df.shape[0]}). Max allowed is {max_rows}.")
-
     if df.shape[1] > max_columns:
         raise ValidationError(f"Dataset has too many columns ({df.shape[1]}). Max allowed is {max_columns}.")
-
     if df_memory > max_memory_bytes:
         raise ValidationError(f"Dataset uses too much memory ({df_memory} bytes). Max allowed is {max_memory_bytes}.")
 
-    logger.info({
-        "event": "memory_guard_passed",
-        "rows": df.shape[0],
-        "columns": df.shape[1],
-        "memory_bytes": int(df_memory)
-    })
-
-    # -----------------------------------
-    # AUTOMATIC TYPE CONVERSION
-    # -----------------------------------
+    # Automatic type conversion
     for col in df.columns:
         if df[col].dtype == object and df[col].astype(str).str.endswith("%").any():
             df[col] = df[col].astype(str).str.replace("%", "", regex=False).str.replace(",", ".", regex=False)
@@ -324,15 +342,7 @@ def validate_and_clean_csv(file_bytes: bytes) -> pd.DataFrame:
         if df[col].dtype == object:
             df[col] = pd.to_datetime(df[col], errors="ignore")
 
-    # -----------------------------------
-    # ANALYSIS READINESS VALIDATION
-    # -----------------------------------
-    logger.warning({
-        "event": "debug_dtypes_before_numeric_check",
-        "dtypes": {col: str(df[col].dtype) for col in df.columns},
-        "head": df.head().to_dict()
-    })
-
+    # Analysis readiness
     numeric_cols = df.select_dtypes(include=["number"]).columns
 
     if df.shape[0] < 1:
@@ -350,14 +360,12 @@ def validate_and_clean_csv(file_bytes: bytes) -> pd.DataFrame:
     if total_cells > MAX_CELLS:
         raise ValidationError(f"Dataset contains {total_cells:,} cells, exceeding the limit of {MAX_CELLS:,}.")
 
-    numeric_cols = df.select_dtypes(include=["number"]).columns
     if len(numeric_cols) < MIN_NUMERIC_COLUMNS:
         raise ValidationError("Dataset must contain at least one numeric column for analysis.")
 
     id_like_columns = [col for col in df.columns if df[col].nunique() == df.shape[0]]
 
     MIN_ROWS_FOR_ID_CHECK = 50
-
     if df.shape[0] >= MIN_ROWS_FOR_ID_CHECK and len(id_like_columns) == df.shape[1]:
         raise ValidationError(
             "Dataset appears to contain only ID-like columns (all values unique). "
@@ -369,93 +377,9 @@ def validate_and_clean_csv(file_bytes: bytes) -> pd.DataFrame:
         raise ValidationError(f"Dataset contains columns with only null values: {null_columns}")
 
     return df
-# -----------------------------
-# Parquet validation
-# -----------------------------
-def validate_and_clean_parquet(self, file_bytes: bytes) -> pd.DataFrame:
-    """
-    Full Parquet validator used in all parquet-related tests.
-    Converts ArrowInvalid / ArrowTypeError into ValidationError.
-    Normalizes schema, checks duplicate columns, null names,
-    nested lists, mixed types, and canonicalizes schema.
-    """
-
-    if not file_bytes or len(file_bytes) < 4:
-        raise ValidationError("Invalid Parquet file: too small.")
-
-    # Magic bytes check
-    if file_bytes[:4] != b"PAR1":
-        raise ValidationError("Invalid Parquet magic bytes.")
-
-    try:
-        table = pq.read_table(pa.BufferReader(file_bytes))
-    except (pa.ArrowInvalid, pa.ArrowTypeError) as e:
-        raise ValidationError("Invalid Parquet data: " + str(e))
-
-    df = table.to_pandas()
-
-    # -----------------------------------
-    # Column name validation
-    # -----------------------------------
-    cleaned_cols = []
-    for col in df.columns:
-        if col is None or str(col).strip() == "":
-            raise ValidationError("Empty or null column name.")
-        cleaned_cols.append(str(col).strip())
-
-    df.columns = cleaned_cols
-
-    # Duplicate columns
-    if len(df.columns) != len(set(df.columns)):
-        raise ValidationError("Duplicate columns detected.")
-
-    # -----------------------------------
-    # Nested list validation
-    # -----------------------------------
-    for col in df.columns:
-        series = df[col]
-        if series.apply(lambda x: isinstance(x, list)).any():
-            # Check for consistent types
-            types = set()
-            for v in series:
-                if isinstance(v, list):
-                    for item in v:
-                        types.add(type(item))
-            if len(types) > 1:
-                raise ValidationError("Nested list contains mixed types.")
-
-    # -----------------------------------
-    # Type coercion rules
-    # -----------------------------------
-    for col in df.columns:
-        series = df[col]
-
-        # Mixed numeric + string → fail
-        if series.apply(lambda x: isinstance(x, (int, float))).any() and \
-           series.apply(lambda x: isinstance(x, str)).any():
-            raise ValidationError("Mixed numeric and string values.")
-
-        # Bool + int → allowed (promote to int)
-        if series.apply(lambda x: isinstance(x, bool)).any() and \
-           series.apply(lambda x: isinstance(x, int)).any():
-            df[col] = series.astype(int)
-
-        # Int + float → promote to float
-        if series.apply(lambda x: isinstance(x, int)).any() and \
-           series.apply(lambda x: isinstance(x, float)).any():
-            df[col] = series.astype(float)
-
-    # -----------------------------------
-    # Nullability rules
-    # -----------------------------------
-    for col in df.columns:
-        series = df[col]
-        if series.isna().all():
-            raise ValidationError(f"Column '{col}' contains only null values.")
-
-    return df
 
 
-
-# Global service instance
+# ============================================================
+# Global instance
+# ============================================================
 data_service = DataService()

@@ -109,16 +109,17 @@ async def ask_ai(request: Request, payload: AskRequest):
         return response
 
     try:
-        # PipelineOrchestrator.run(question) -> körs i threadpool utan state som extra argument
-        result = await run_in_threadpool(pipeline.run, payload.question)
+        # ALLTID skicka state som dataset
+        result = await run_in_threadpool(pipeline.run, payload.question, state)
+    except TypeError:
+        # fallback skickar OCKSÅ state
+        result = await run_in_threadpool(pipeline.run, payload.question, state)
     except ValidationError as e:
         raise UserError(str(e))
     except TimeoutError as e:
         raise SystemError(str(e))
     except RuntimeError as e:
         raise SystemError(str(e))
-
-
 
     result_dict = {
         "question": result.question,
@@ -177,8 +178,11 @@ async def ask_ai_stream(request: Request, payload: AskRequest):
             return
 
         try:
-            # PipelineOrchestrator.run(question) -> körs i threadpool utan state som extra argument
-            result = await run_in_threadpool(pipeline.run, payload.question)
+            # ALLTID skicka state som dataset
+            result = await run_in_threadpool(pipeline.run, payload.question, state)
+        except TypeError:
+            # fallback skickar OCKSÅ state
+            result = await run_in_threadpool(pipeline.run, payload.question, state)
         except ValidationError as e:
             yield f"Validation error: {str(e)}".encode("utf-8")
             return
@@ -188,8 +192,6 @@ async def ask_ai_stream(request: Request, payload: AskRequest):
         except RuntimeError as e:
             yield f"System error: {str(e)}".encode("utf-8")
             return
-
-
 
         result_dict = {
             "question": result.question,

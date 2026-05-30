@@ -186,12 +186,9 @@ class ResponseParser(PipelineStep[LLMRunnerOutput, ResponseParserOutput]):
         if "Answer:" not in raw and (os.getenv("TESTING") == "1" or "PYTEST_CURRENT_TEST" in os.environ):
             answer = "Detta är ett mockat AI‑svar."
         else:
-            # Försök extrahera allt efter "Answer:"
-            if "Answer:" in raw:
-                cleaned = raw.split("Answer:", 1)[-1].strip()
-            else:
-                cleaned = raw
-
+            cleaned = raw.split("User question:")[-1].strip()
+            if "Answer:" in cleaned:
+                cleaned = cleaned.split("Answer:", 1)[-1].strip()
             answer = cleaned if cleaned else raw
 
         return ResponseParserOutput(

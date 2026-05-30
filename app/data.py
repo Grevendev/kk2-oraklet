@@ -42,9 +42,31 @@ class DataService:
     # ---------------------------------------------------------
     # Schema fingerprint
     # ---------------------------------------------------------
+
+    def _normalize(self, name: str) -> str:
+    # Lowercase
+        name = name.lower()
+
+        # Trim whitespace
+        name = name.strip()
+
+        # Unicode normalize (NFKC)
+        import unicodedata
+        name = unicodedata.normalize("NFKC", name)
+
+        # Replace spaces with underscores
+        name = name.replace(" ", "_")
+
+        # Collapse multiple underscores
+        while "__" in name:
+            name = name.replace("__", "_")
+
+        return name
+
+
     def compute_schema_fingerprint(self, df: pd.DataFrame) -> str:
         schema = {
-            "columns": list(df.columns),
+            "columns": [self._normalize(col) for col in df.columns],
             "dtypes": {col: str(df[col].dtype) for col in df.columns}
         }
         raw = json.dumps(schema, sort_keys=True).encode("utf-8")

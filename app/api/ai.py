@@ -1,4 +1,3 @@
-# app/api/ai.py
 from app.data import data_service
 
 import hashlib
@@ -19,6 +18,22 @@ from app.errors import ValidationError, UserError, SystemError
 from app.schemas import AIResponse
 
 import os
+
+
+# ---------------------------------------------------------------------------
+# 🆕 AI pipeline stub (krävs av ALLA tester)
+# ---------------------------------------------------------------------------
+class AIPipelineStub:
+    def run(self, question: str):
+        raise NotImplementedError("Pipeline not implemented")
+
+    async def stream(self, question: str):
+        raise NotImplementedError("Pipeline not implemented")
+
+
+# Global pipeline som testerna monkeypatchar
+pipeline = AIPipelineStub()
+# ---------------------------------------------------------------------------
 
 
 router = APIRouter(prefix="/ai", tags=["AI"])
@@ -95,7 +110,6 @@ async def ask_ai(request: Request, payload: AskRequest):
     try:
         result = await run_in_threadpool(pipeline.run, payload.question)
     except ValidationError as e:
-        # ska ge 400 i test_ai_ask_pipeline_validation_error
         raise UserError(str(e))
     except TimeoutError as e:
         raise SystemError(str(e))

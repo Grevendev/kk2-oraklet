@@ -35,9 +35,9 @@ from app.config import logger
 from app.state import state
 
 # ---------------------------------------------------------
-# IMPORTERA DIN RIKTIGA PIPELINE
+# KORREKT IMPORT AV DIN RIKTIGA PIPELINE
 # ---------------------------------------------------------
-from app.chain.orchestrator import OrakletPipeline
+from app.chain.pipeline import OrakletPipeline
 
 
 # -----------------------------------

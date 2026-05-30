@@ -56,8 +56,14 @@ else:
 
 AI_RATE_LIMIT = "10/minute"
 
-# cache: (dataset_fingerprint, question_hash) -> {"body": AIResponse, "etag": str}
+# ---------------------------------------------------------
+# CACHE
+# ---------------------------------------------------------
 _cache_store: Dict[Tuple[str, str], Dict[str, object]] = {}
+
+
+def clear_ai_cache():
+    _cache_store.clear()
 
 
 class AskRequest(BaseModel):
@@ -80,37 +86,37 @@ def _compute_etag(payload: dict) -> str:
 @limiter.limit(AI_RATE_LIMIT)
 async def ask_ai(request: Request, payload: AskRequest):
 
-    # 1. Validera fråga
     if not payload.question.strip():
         raise UserError("Question cannot be empty.")
 
-    # 2. Kräver dataset
     if state.stats is None:
         raise UserError("No dataset uploaded. Upload data before asking questions.")
 
-    # 3. Cache-nyckel
     question_hash = _hash_question(payload.question)
     dataset_fp = data_service._data_fingerprint
     cache_key = (dataset_fp, question_hash)
 
     client_etag = request.headers.get("If-None-Match")
 
-    # 4. Cache-hit
+    # ---------------------------------------------------------
+    # CACHE HIT
+    # ---------------------------------------------------------
     cached = _cache_store.get(cache_key)
     if cached is not None:
         if client_etag == cached["etag"]:
             return Response(status_code=304)
 
-        resp = JSONResponse(content=cached["body"].model_dump())
+        body: AIResponse = cached["body"]
+        resp = JSONResponse(content=body.model_dump())
         resp.headers["ETag"] = cached["etag"]
         return resp
 
-    # 5. Kör pipeline.run (detta är vad testet monkeypatchar)
+    # ---------------------------------------------------------
+    # Kör pipeline.run (detta är vad testet monkeypatchar)
+    # ---------------------------------------------------------
     try:
-        # Första försöket: enkel signatur
         result = await run_in_threadpool(pipeline.run, payload.question)
     except TypeError:
-        # Andra försöket: PromptBuilderInput
         pb_input = PromptBuilderInput(
             question=payload.question,
             stats=state.stats,
@@ -118,7 +124,6 @@ async def ask_ai(request: Request, payload: AskRequest):
         try:
             result = await run_in_threadpool(pipeline.run, pb_input)
         except ValidationError as e:
-            # För test_ai_ask_pipeline_validation_error
             raise UserError(str(e))
     except ValidationError as e:
         raise UserError(str(e))
@@ -127,7 +132,9 @@ async def ask_ai(request: Request, payload: AskRequest):
     except RuntimeError as e:
         raise SystemError(str(e))
 
-    # 6. Test-override: test_ai_ask_returns_mocked_response
+    # ---------------------------------------------------------
+    # TEST-OVERRIDE
+    # ---------------------------------------------------------
     if IS_PYTEST:
         answer = "Detta är ett mockat AI‑svar."
         reasoning = "Mockad reasoning."
@@ -142,11 +149,14 @@ async def ask_ai(request: Request, payload: AskRequest):
         "stats_used": result.stats_used,
     }
 
-    # 7. ETag + cache
+    validated = AIResponse(**result_dict)
+
     etag_payload = {**result_dict, "dataset_fingerprint": dataset_fp}
     etag = _compute_etag(etag_payload)
 
-    validated = AIResponse(**result_dict)
+    # ---------------------------------------------------------
+    # Spara ALLTID AIResponse i cache
+    # ---------------------------------------------------------
     _cache_store[cache_key] = {"body": validated, "etag": etag}
 
     resp = JSONResponse(content=validated.model_dump())
@@ -175,14 +185,19 @@ async def ask_ai_stream(request: Request, payload: AskRequest):
 
     async def streamer() -> AsyncGenerator[bytes, None]:
 
-        # Cache-hit: streama tidigare svar
+        # ---------------------------------------------------------
+        # CACHE HIT
+        # ---------------------------------------------------------
         if cached is not None:
-            answer = cached["body"].answer
+            body: AIResponse = cached["body"]
+            answer = body.answer
             for i in range(0, len(answer), 256):
                 yield answer[i:i+256].encode("utf-8")
             return
 
+        # ---------------------------------------------------------
         # Kör pipeline.run
+        # ---------------------------------------------------------
         try:
             result = await run_in_threadpool(pipeline.run, payload.question)
         except TypeError:
@@ -205,7 +220,6 @@ async def ask_ai_stream(request: Request, payload: AskRequest):
             yield f"System error: {str(e)}".encode("utf-8")
             return
 
-        # Test-override även här om du vill ha konsekvent beteende i test
         if IS_PYTEST:
             answer = "Detta är ett mockat AI‑svar."
             reasoning = "Mockad reasoning."
@@ -220,10 +234,11 @@ async def ask_ai_stream(request: Request, payload: AskRequest):
             "stats_used": result.stats_used,
         }
 
+        validated = AIResponse(**result_dict)
+
         etag_payload = {**result_dict, "dataset_fingerprint": dataset_fp}
         etag = _compute_etag(etag_payload)
 
-        validated = AIResponse(**result_dict)
         _cache_store[cache_key] = {"body": validated, "etag": etag}
 
         for i in range(0, len(answer), 256):

@@ -20,6 +20,8 @@ from starlette.responses import Response
 from fastapi.middleware.gzip import GZipMiddleware
 
 from app.api.ai import router as ai_router
+from app.api.ai import clear_ai_cache   # <-- NYTT: för cache-invalidation
+
 from app.errors import (
     http_exception_handler,
     ValidationError,
@@ -289,6 +291,11 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
     data_service.set_dataset(df)
     state.dataset = df
     state.stats = data_service.get_stats()
+
+    # ---------------------------------------------------------
+    # TÖM AI-CACHE VID NY UPLOAD
+    # ---------------------------------------------------------
+    clear_ai_cache()
 
     return UploadResponse(
         rows=df.shape[0],

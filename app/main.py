@@ -280,7 +280,8 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
 
     if data_service._df is not None:
         if data_service.is_schema_changed(df):
-            raise UserError("Schema drift detected")
+            if state.schema_drift_blocking:
+                raise UserError("Schema drift detected")
 
     data_service.set_dataset(df)
     state.dataset = df

@@ -283,11 +283,18 @@ def validate_and_clean_csv(file_bytes: bytes) -> pd.DataFrame:
     cleaned_columns = []
     for col in df.columns:
         new_col = str(col).strip()
-        if new_col == "" or new_col.lower().startswith("unnamed"):
+
+        if (
+            new_col == ""
+            or new_col.lower().startswith("unnamed")
+            or new_col.lower() in {"nan", "none", "null"}
+        ):
             raise ValidationError(f"Invalid column name detected: '{col}'")
+
         cleaned_columns.append(new_col)
 
     df.columns = cleaned_columns
+
 
     # Drop fully empty columns
     df = df.dropna(axis=1, how="all")

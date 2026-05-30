@@ -81,6 +81,7 @@ class DataService:
     # Store dataset
     # ---------------------------------------------------------
     def set_dataset(self, df: pd.DataFrame) -> None:
+        df.columns = [self._normalize(col) for col in df.columns]
         self._df = df
         self._stats_cache = None
         self._stats_timestamp = None

@@ -1,3 +1,5 @@
+# app/main.py
+
 import os
 import uuid
 import time
@@ -20,7 +22,7 @@ from starlette.responses import Response
 from fastapi.middleware.gzip import GZipMiddleware
 
 from app.api.ai import router as ai_router
-from app.api.ai import clear_ai_cache   # <-- NYTT: för cache-invalidation
+from app.api.ai import clear_ai_cache
 
 from app.errors import (
     http_exception_handler,
@@ -35,10 +37,6 @@ from app.data import data_service, validate_and_clean_csv
 from app.schemas import UploadResponse, StatsResponse
 from app.config import logger
 from app.state import state
-
-# ---------------------------------------------------------
-# KORREKT IMPORT AV DIN RIKTIGA PIPELINE
-# ---------------------------------------------------------
 from app.chain.pipeline import OrakletPipeline
 
 
@@ -98,10 +96,6 @@ def record_validation_failure():
 @app.on_event("startup")
 async def on_startup():
     logger.info({"event": "server_startup"})
-
-    # ---------------------------------------------------------
-    # SÄTT DIN RIKTIGA PIPELINE I GLOBAL STATE
-    # ---------------------------------------------------------
     state.pipeline = OrakletPipeline()
 
 
@@ -143,7 +137,7 @@ app.state.limiter = limiter
 # SECURITY HEADERS
 # -----------------------------------
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request, call_next):
+    async def dispatch(self, request: Request, call_next):
         response: Response = await call_next(request)
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["X-Content-Type-Options"] = "nosniff"
@@ -292,9 +286,7 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
     state.dataset = df
     state.stats = data_service.get_stats()
 
-    # ---------------------------------------------------------
-    # TÖM AI-CACHE VID NY UPLOAD
-    # ---------------------------------------------------------
+    # Töm AI-cache vid ny upload
     clear_ai_cache()
 
     return UploadResponse(

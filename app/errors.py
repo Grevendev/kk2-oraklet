@@ -1,5 +1,8 @@
+# app/errors.py
+
 from fastapi import Request, HTTPException
 from fastapi.responses import JSONResponse
+
 from app.schemas import ErrorResponse
 from app.config import logger
 
@@ -16,10 +19,9 @@ class UserError(Exception):
 
 class SystemError(Exception):
     """Raised when an unexpected internal error occurs."""
-    def __init__(self, message="Unexpected internal error"):
+    def __init__(self, message: str = "Unexpected internal error"):
         super().__init__(message)
         self.message = message
-
 
 
 # ---------------------------------------

@@ -390,7 +390,7 @@ def validate_and_clean_parquet(self, file_bytes: bytes) -> pd.DataFrame:
     try:
         table = pq.read_table(pa.BufferReader(file_bytes))
     except (pa.ArrowInvalid, pa.ArrowTypeError) as e:
-        raise ValidationError(str(e))
+        raise ValidationError("Invalid Parquet data: " + str(e))
 
     df = table.to_pandas()
 

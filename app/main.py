@@ -1,3 +1,5 @@
+# app/main.py
+
 import os
 import uuid
 import time
@@ -20,6 +22,8 @@ from starlette.responses import Response
 from fastapi.middleware.gzip import GZipMiddleware
 
 from app.api.ai import router as ai_router
+from app.api.ai import clear_ai_cache
+
 from app.errors import (
     http_exception_handler,
     ValidationError,
@@ -33,13 +37,12 @@ from app.data import data_service, validate_and_clean_csv
 from app.schemas import UploadResponse, StatsResponse
 from app.config import logger
 from app.state import state
+from app.chain.pipeline import OrakletPipeline
 
 
 # -----------------------------------
 # TEST MODE AUTO-DETECTION
 # -----------------------------------
-# Pytest always sets PYTEST_CURRENT_TEST
-# Force test mode when pytest is running (works with uv, Windows, Linux, macOS)
 if "pytest" in os.getenv("PYTEST_CURRENT_TEST", "") \
    or "pytest" in os.getenv("_", "") \
    or any("pytest" in arg for arg in os.sys.argv):
@@ -93,6 +96,7 @@ def record_validation_failure():
 @app.on_event("startup")
 async def on_startup():
     logger.info({"event": "server_startup"})
+    state.pipeline = OrakletPipeline()
 
 
 @app.on_event("shutdown")
@@ -133,7 +137,7 @@ app.state.limiter = limiter
 # SECURITY HEADERS
 # -----------------------------------
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request, call_next):
+    async def dispatch(self, request: Request, call_next):
         response: Response = await call_next(request)
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["X-Content-Type-Options"] = "nosniff"
@@ -281,6 +285,9 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
     data_service.set_dataset(df)
     state.dataset = df
     state.stats = data_service.get_stats()
+
+    # Töm AI-cache vid ny upload
+    clear_ai_cache()
 
     return UploadResponse(
         rows=df.shape[0],

@@ -1,3 +1,5 @@
+# app/schemas.py
+
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 
@@ -19,6 +21,7 @@ class ErrorResponse(BaseModel):
     error_type: str
     message: str
     details: Optional[Dict[str, Any]] = None
+
 
 class AIResponse(BaseModel):
     """Standardized response model for AI answers."""

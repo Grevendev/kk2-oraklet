@@ -1,3 +1,5 @@
+# app/data.py
+
 import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
@@ -30,6 +32,9 @@ class DataService:
         # Schema fingerprint
         self._schema_fingerprint: Optional[str] = None
 
+        # Full data fingerprint
+        self._data_fingerprint: Optional[str] = None
+
     # -----------------------------
     # Cleanup
     # -----------------------------
@@ -39,6 +44,7 @@ class DataService:
         self._stats_cache = None
         self._stats_timestamp = None
         self._schema_fingerprint = None
+        self._data_fingerprint = None
 
     # -----------------------------
     # ETag generation
@@ -77,8 +83,6 @@ class DataService:
         new_schema_fp = self.compute_schema_fingerprint(df)
         return new_schema_fp != self._schema_fingerprint
 
-
-
     # -----------------------------
     # Store dataset + compute fingerprint
     # -----------------------------
@@ -89,8 +93,6 @@ class DataService:
         # Reset stats cache
         self._stats_cache = None
         self._stats_timestamp = None
-
-        import hashlib
 
         # Full-data fingerprint (used for AI cache invalidation)
         csv_bytes = df.to_csv(index=False).encode("utf-8")
@@ -112,8 +114,6 @@ class DataService:
             f"schema_fingerprint: {self._schema_fingerprint}"
         )
 
-
-
     # -----------------------------
     # Get stats (with caching)
     # -----------------------------
@@ -131,7 +131,7 @@ class DataService:
             return self._stats_cache
 
         # Compute new stats
-        stats = {}
+        stats: Dict[str, Any] = {}
         for col in self._df.select_dtypes(include=["number"]).columns:
             series = self._df[col]
             stats[col] = {
@@ -221,10 +221,9 @@ def validate_and_clean_csv(file_bytes: bytes) -> pd.DataFrame:
     # EARLY TYPE INFERENCE
     # -----------------------------------
     for col in df.columns:
-    # Only convert if column is numeric-like
+        # Only convert if column is numeric-like
         if df[col].astype(str).str.match(r"^-?\d+(\.\d+)?$").all():
             df[col] = pd.to_numeric(df[col], errors="coerce")
-
 
     # Clean column names
     cleaned_columns = []
@@ -293,12 +292,11 @@ def validate_and_clean_csv(file_bytes: bytes) -> pd.DataFrame:
         raise ValidationError(f"Dataset uses too much memory ({df_memory} bytes). Max allowed is {max_memory_bytes}.")
 
     logger.info({
-    "event": "memory_guard_passed",
-    "rows": df.shape[0],
-    "columns": df.shape[1],
-    "memory_bytes": int(df_memory)
+        "event": "memory_guard_passed",
+        "rows": df.shape[0],
+        "columns": df.shape[1],
+        "memory_bytes": int(df_memory)
     })
-
 
     # -----------------------------------
     # AUTOMATIC TYPE CONVERSION
@@ -358,14 +356,13 @@ def validate_and_clean_csv(file_bytes: bytes) -> pd.DataFrame:
 
     id_like_columns = [col for col in df.columns if df[col].nunique() == df.shape[0]]
 
-    MIN_ROWS_FOR_ID_CHECK = 50  # eller 100 om du vill vara ännu försiktigare
+    MIN_ROWS_FOR_ID_CHECK = 50
 
     if df.shape[0] >= MIN_ROWS_FOR_ID_CHECK and len(id_like_columns) == df.shape[1]:
         raise ValidationError(
             "Dataset appears to contain only ID-like columns (all values unique). "
             "At least one column must contain repeated or aggregatable values."
         )
-
 
     null_columns = [col for col in df.columns if df[col].isna().all()]
     if null_columns:

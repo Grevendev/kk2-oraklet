@@ -1,3 +1,5 @@
+# app/state.py
+
 from app.data import data_service
 
 
@@ -19,10 +21,13 @@ class GlobalState:
         # AI pipeline / data service
         self.data_service = data_service
 
+        # Pipeline (sätts vid startup i app/main.py)
+        self.pipeline = None
+
     def reset(self):
         """
         Reset all global ingestion + AI state.
-        Testsviten anropar detta i nästan alla Parquet‑tester.
+        Testsviten kan anropa detta för att få en ren miljö.
         """
         self.stats = None
         self.dataset = None
@@ -34,8 +39,11 @@ class GlobalState:
         self.schema_drift_blocking = True
         self.semantic_drift_blocking = True
 
+        # Pipeline lämnas orörd här; test kan sätta om den själva.
+
 
 state = GlobalState()
+
 
 class CircuitBreaker:
     def __init__(self):
@@ -43,5 +51,5 @@ class CircuitBreaker:
         self.failure_count = 0
         self.state = "closed"
 
-breaker = CircuitBreaker()
 
+breaker = CircuitBreaker()

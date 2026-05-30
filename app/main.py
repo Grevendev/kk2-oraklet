@@ -39,7 +39,8 @@ from app.state import state
 # TEST MODE AUTO-DETECTION
 # -----------------------------------
 # Pytest always sets PYTEST_CURRENT_TEST
-if "PYTEST_CURRENT_TEST" in os.environ:
+# Force test mode when pytest is running (works with uv)
+if "pytest" in os.getenv("_", "") or "PYTEST_CURRENT_TEST" in os.environ:
     os.environ["TESTING"] = "1"
 
 TESTING = os.getenv("TESTING") == "1"

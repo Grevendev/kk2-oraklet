@@ -1,28 +1,39 @@
 # app/chain/retry_policy.py
 
+import math
 import random
-import time
 
 
 class RetryPolicy:
     """
-    Exponential backoff with jitter for transient LLM failures.
+    Simple exponential backoff retry policy.
+    Used by LLMRunner to decide delay between retries.
     """
 
     def __init__(
         self,
         max_attempts: int = 3,
-        base_delay: float = 0.2,
-        max_delay: float = 2.0,
+        base_delay: float = 0.5,
+        max_delay: float = 5.0,
+        factor: float = 2.0,
+        jitter: float = 0.1,
     ) -> None:
         self.max_attempts = max_attempts
         self.base_delay = base_delay
         self.max_delay = max_delay
+        self.factor = factor
+        self.jitter = jitter
 
     def get_delay(self, attempt: int) -> float:
         """
-        Exponential backoff + jitter.
+        Returns delay (in seconds) before the next retry.
+        attempt: 0-based attempt index.
         """
-        exp = min(self.max_delay, self.base_delay * (2 ** attempt))
-        jitter = random.uniform(0, exp * 0.25)
-        return exp + jitter
+        delay = self.base_delay * (self.factor ** attempt)
+        delay = min(delay, self.max_delay)
+
+        # Add small jitter to avoid thundering herd
+        jitter_value = delay * self.jitter
+        delay = delay + random.uniform(-jitter_value, jitter_value)
+
+        return max(0.0, delay)

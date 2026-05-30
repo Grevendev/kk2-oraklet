@@ -109,10 +109,7 @@ async def ask_ai(request: Request, payload: AskRequest):
         return response
 
     try:
-        # Try pipeline signature: run(question, dataset)
-        result = await run_in_threadpool(pipeline.run, payload.question, state)
-    except TypeError:
-        # Fallback for pipelines that only accept run(question)
+        # PipelineOrchestrator.run(question) -> körs i threadpool utan state som extra argument
         result = await run_in_threadpool(pipeline.run, payload.question)
     except ValidationError as e:
         raise UserError(str(e))
@@ -120,6 +117,7 @@ async def ask_ai(request: Request, payload: AskRequest):
         raise SystemError(str(e))
     except RuntimeError as e:
         raise SystemError(str(e))
+
 
 
     result_dict = {
@@ -179,10 +177,7 @@ async def ask_ai_stream(request: Request, payload: AskRequest):
             return
 
         try:
-            # Try pipeline signature: run(question, dataset)
-            result = await run_in_threadpool(pipeline.run, payload.question, state)
-        except TypeError:
-            # Fallback for pipelines that only accept run(question)
+            # PipelineOrchestrator.run(question) -> körs i threadpool utan state som extra argument
             result = await run_in_threadpool(pipeline.run, payload.question)
         except ValidationError as e:
             yield f"Validation error: {str(e)}".encode("utf-8")
@@ -193,6 +188,7 @@ async def ask_ai_stream(request: Request, payload: AskRequest):
         except RuntimeError as e:
             yield f"System error: {str(e)}".encode("utf-8")
             return
+
 
 
         result_dict = {

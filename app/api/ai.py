@@ -19,6 +19,8 @@ from app.schemas import AIResponse
 from app.chain.steps import PromptBuilderInput
 from app.chain.pipeline import OrakletPipeline
 
+pipeline = OrakletPipeline()
+
 
 # ---------------------------------------------------------
 # Pytest-detektion

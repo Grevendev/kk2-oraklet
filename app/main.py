@@ -285,6 +285,7 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
     data_service.set_dataset(df)
     state.dataset = df
     state.stats = data_service.get_stats()
+    state.schema_fingerprint = data_service._schema_fingerprint
 
     # Töm AI-cache vid ny upload
     clear_ai_cache()

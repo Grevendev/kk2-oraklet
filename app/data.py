@@ -191,6 +191,7 @@ class DataService:
                 raise ValidationError("Empty or null column name.")
             cleaned.append(str(col).strip())
         df.columns = cleaned
+        df.columns = [self._normalize(col) for col in df.columns]
 
         # ---------------------------------------------------------
         # Nested list type consistency

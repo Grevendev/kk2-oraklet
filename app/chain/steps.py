@@ -203,7 +203,21 @@ class ResponseParser(PipelineStep[LLMRunnerOutput, ResponseParserOutput]):
     def invoke(self, input: LLMRunnerOutput) -> ResponseParserOutput:
         logger.info("ResponseParser invoked")
 
-        raw = input.raw_output.strip()
+        raw_output = input.raw_output
+
+        # Testläge: LLMRunner kan ge en dict (t.ex. {"answer": "Retry success"})
+        if isinstance(raw_output, dict):
+            # Försök plocka ut något vettigt, annars str() som fallback
+            raw_text = (
+                raw_output.get("generated_text")
+                or raw_output.get("answer")
+                or raw_output.get("text")
+                or str(raw_output)
+            )
+        else:
+            raw_text = raw_output
+
+        raw = raw_text.strip()
 
         if "Answer:" not in raw and (os.getenv("TESTING") == "1" or "PYTEST_CURRENT_TEST" in os.environ):
             answer = "Detta är ett mockat AI‑svar."
@@ -220,6 +234,7 @@ class ResponseParser(PipelineStep[LLMRunnerOutput, ResponseParserOutput]):
             stats_used={"temp": {"mean": 10}},
             model=MODEL_NAME
         )
+
 
 
 # ============================================================

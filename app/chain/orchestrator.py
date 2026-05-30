@@ -23,18 +23,12 @@ class PipelineOrchestrator(Generic[InputT, OutputT]):
         self.steps = steps
         self.metrics = PipelineMetrics()
 
-    # ------------------------------------------------------------
-    # Required by retry-policy tests
-    # ------------------------------------------------------------
     def parse_output(self, output: Any) -> Any:
         """
         Default output parser. Tests monkeypatch this method.
         """
         return output
 
-    # ----------------------------------------------------------------------
-    # Runtime schema validation between steps
-    # ----------------------------------------------------------------------
     def _validate_step_types(self, prev_step, next_step, value):
         prev_bases = getattr(prev_step.__class__, "__orig_bases__", [])
         next_bases = getattr(next_step.__class__, "__orig_bases__", [])
@@ -63,9 +57,6 @@ class PipelineOrchestrator(Generic[InputT, OutputT]):
                 step_name=type(next_step).__name__,
             )
 
-    # ----------------------------------------------------------------------
-    # Pipeline execution
-    # ----------------------------------------------------------------------
     def run(self, input: InputT) -> OutputT:
         trace_id = str(uuid4())
         value: Any = input
@@ -93,21 +84,11 @@ class PipelineOrchestrator(Generic[InputT, OutputT]):
             try:
                 value = step.invoke(value)
 
-                # ------------------------------------------------------------
-                # If parse_output is monkeypatched → skip remaining steps
-                # AND return immediately
-                # ------------------------------------------------------------
-                if self.parse_output.__func__ is not PipelineOrchestrator.parse_output:
-                    return self.parse_output(value)
-
-                # Schema validation
                 if i < len(self.steps) - 1:
                     next_step = self.steps[i + 1]
                     self._validate_step_types(step, next_step, value)
 
                 duration_ms = (perf_counter() - start) * 1000
-
-                # Metrics
                 self.metrics.record_step_success(step_name, duration_ms)
 
                 logger.info({
@@ -154,7 +135,6 @@ class PipelineOrchestrator(Generic[InputT, OutputT]):
                     original_exception=exc,
                 ) from exc
 
-        # Pipeline finished normally
         self.metrics.pipeline_total_success += 1
 
         logger.info({
@@ -162,5 +142,4 @@ class PipelineOrchestrator(Generic[InputT, OutputT]):
             "trace_id": trace_id,
         })
 
-        # Normal production behavior
         return self.parse_output(value)  # type: ignore[return-value]

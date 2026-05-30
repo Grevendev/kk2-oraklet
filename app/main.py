@@ -48,6 +48,17 @@ from app.chain.pipeline import OrakletPipeline
 TESTING = os.getenv("TESTING") == "1"
 if "pytest" in sys.argv[0]:
     TESTING = True
+if TESTING:
+    class NoOpLimiter:
+        def limit(self, *args, **kwargs):
+            def decorator(func):
+                return func
+            return decorator
+    limiter = NoOpLimiter()
+else:
+    from slowapi import Limiter
+    from slowapi.util import get_remote_address
+    limiter = Limiter(key_func=get_remote_address)
 
 
 
@@ -120,17 +131,7 @@ app.add_middleware(
 # -----------------------------------
 # RATE LIMITER (DISABLED IN TEST MODE)
 # -----------------------------------
-if not TESTING:
-    limiter = Limiter(key_func=get_remote_address)
-else:
-    class NoOpLimiter:
-        def limit(self, *args, **kwargs):
-            def decorator(func):
-                return func
-            return decorator
-    limiter = NoOpLimiter()
 
-app.state.limiter = limiter
 
 
 # -----------------------------------

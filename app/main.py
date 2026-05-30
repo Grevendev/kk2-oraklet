@@ -307,6 +307,8 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
     # ---------------------------------------------------------
     # Schema drift
     # ---------------------------------------------------------
+    df.columns = [data_service._normalize(col) for col in df.columns]
+    
     if data_service._df is not None:
         if data_service.is_schema_changed(df):
             if state.schema_drift_blocking:

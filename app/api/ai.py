@@ -1,3 +1,5 @@
+# app/api/ai.py
+
 import hashlib
 import os
 from typing import Dict, Tuple, AsyncGenerator
@@ -15,6 +17,8 @@ from app.state import state
 from app.errors import ValidationError, UserError, SystemError
 from app.schemas import AIResponse
 from app.chain.steps import PromptBuilderInput
+from app.chain.pipeline import OrakletPipeline
+
 
 # ---------------------------------------------------------
 # Pytest-detektion
@@ -23,23 +27,21 @@ IS_PYTEST = "PYTEST_CURRENT_TEST" in os.environ
 
 
 # ---------------------------------------------------------
-# Pipeline-stub (ersätts av riktig pipeline eller monkeypatch)
+# Dynamisk pipeline-resolver
 # ---------------------------------------------------------
-class AIPipelineStub:
-    def run(self, *args, **kwargs):
-        raise NotImplementedError("Pipeline not implemented")
-
-    async def stream(self, *args, **kwargs):
-        raise NotImplementedError("Pipeline streaming not implemented")
-
-
-# ---------------------------------------------------------
-# pipeline = state.pipeline om den finns, annars stub
-# ---------------------------------------------------------
-pipeline = state.pipeline if getattr(state, "pipeline", None) is not None else AIPipelineStub()
+def get_pipeline():
+    """
+    Hämtar pipeline från global state.
+    Om den saknas skapas en ny OrakletPipeline.
+    Detta fixar buggen där pipeline låstes vid import.
+    """
+    if state.pipeline is None:
+        state.pipeline = OrakletPipeline()
+    return state.pipeline
 
 
 router = APIRouter(prefix="/ai", tags=["AI"])
+
 
 # ---------------------------------------------------------
 # Rate limiter (inaktiverad i pytest)
@@ -55,6 +57,7 @@ else:
     limiter = NoOpLimiter()
 
 AI_RATE_LIMIT = "10/minute"
+
 
 # ---------------------------------------------------------
 # CACHE
@@ -112,11 +115,14 @@ async def ask_ai(request: Request, payload: AskRequest):
         return resp
 
     # ---------------------------------------------------------
-    # Kör pipeline.run (detta är vad testet monkeypatchar)
+    # Kör pipeline.run
     # ---------------------------------------------------------
+    pipeline = get_pipeline()
+
     try:
         result = await run_in_threadpool(pipeline.run, payload.question)
     except TypeError:
+        # fallback för test monkeypatch
         pb_input = PromptBuilderInput(
             question=payload.question,
             stats=state.stats,
@@ -182,6 +188,8 @@ async def ask_ai_stream(request: Request, payload: AskRequest):
     cache_key = (dataset_fp, question_hash)
 
     cached = _cache_store.get(cache_key)
+
+    pipeline = get_pipeline()
 
     async def streamer() -> AsyncGenerator[bytes, None]:
 

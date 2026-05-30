@@ -262,14 +262,43 @@ def health_check():
 @app.post("/data/upload", response_model=UploadResponse)
 @limiter.limit("5/minute")
 async def upload_data(request: Request, file: UploadFile = File(...)):
-    if not file.filename.endswith(".csv"):
+    filename = file.filename.lower()
+    content_type = (file.content_type or "").lower()
+
+    # ---------------------------------------------------------
+    # Filtyp-detektion (CSV eller Parquet)
+    # ---------------------------------------------------------
+    is_csv = (
+        filename.endswith(".csv")
+        or content_type in ["text/csv", "application/csv"]
+    )
+
+    is_parquet = (
+        filename.endswith(".parquet")
+        or content_type in [
+            "application/octet-stream",
+            "application/x-parquet",
+            "application/vnd.apache.parquet"
+        ]
+    )
+
+    if not (is_csv or is_parquet):
         record_validation_failure()
-        raise ValidationError("File must be a CSV.")
+        raise ValidationError("Unsupported file type. Must be CSV or Parquet.")
 
     file_bytes = await file.read()
 
+    # ---------------------------------------------------------
+    # CSV → validate_and_clean_csv
+    # Parquet → data_service.validate_and_clean_parquet
+    # ---------------------------------------------------------
     try:
-        df = await run_in_threadpool(validate_and_clean_csv, file_bytes)
+        if is_csv:
+            df = await run_in_threadpool(validate_and_clean_csv, file_bytes)
+        else:
+            # Parquet-validatorn finns i data_service
+            df = await run_in_threadpool(data_service.validate_and_clean_parquet, file_bytes)
+
     except ValidationError:
         record_validation_failure()
         raise
@@ -278,11 +307,17 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
     except Exception:
         raise SystemError("Unexpected internal error")
 
+    # ---------------------------------------------------------
+    # Schema drift
+    # ---------------------------------------------------------
     if data_service._df is not None:
         if data_service.is_schema_changed(df):
             if state.schema_drift_blocking:
                 raise UserError("Schema drift detected")
 
+    # ---------------------------------------------------------
+    # Spara dataset
+    # ---------------------------------------------------------
     data_service.set_dataset(df)
     state.dataset = df
     state.stats = data_service.get_stats()
@@ -296,6 +331,7 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
         columns=list(df.columns),
         dtypes={col: str(dtype) for col, dtype in df.dtypes.items()}
     )
+
 
 
 # -----------------------------------

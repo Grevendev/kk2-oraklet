@@ -156,5 +156,5 @@ class PipelineOrchestrator(Generic[InputT, OutputT]):
             "event": "pipeline_end",
             "trace_id": trace_id,
         })
-
+        value = self.parse_output(value)
         return value  # type: ignore[return-value]

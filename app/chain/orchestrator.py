@@ -1,6 +1,6 @@
 # app/chain/orchestrator.py
 
-from typing import List, Any, TypeVar, Generic, get_origin, get_args
+from typing import List, Any, TypeVar, Generic, get_args
 from time import perf_counter
 from uuid import uuid4
 
@@ -24,7 +24,7 @@ class PipelineOrchestrator(Generic[InputT, OutputT]):
         self.metrics = PipelineMetrics()
 
     # ------------------------------------------------------------
-    # NEW: Required by retry-policy tests
+    # Required by retry-policy tests
     # ------------------------------------------------------------
     def parse_output(self, output: Any) -> Any:
         """
@@ -51,7 +51,6 @@ class PipelineOrchestrator(Generic[InputT, OutputT]):
         if len(prev_generic) != 2 or len(next_generic) != 2:
             return
 
-        prev_output_type = prev_generic[1]
         next_input_type = next_generic[0]
 
         if not isinstance(value, next_input_type):
@@ -94,10 +93,12 @@ class PipelineOrchestrator(Generic[InputT, OutputT]):
             try:
                 value = step.invoke(value)
 
+                # ------------------------------------------------------------
                 # If parse_output is monkeypatched → skip remaining steps
+                # AND return immediately
+                # ------------------------------------------------------------
                 if type(self).parse_output is not PipelineOrchestrator.parse_output:
-                    break
-
+                    return self.parse_output(value)
 
                 # Schema validation
                 if i < len(self.steps) - 1:
@@ -119,7 +120,6 @@ class PipelineOrchestrator(Generic[InputT, OutputT]):
 
             except PipelineError:
                 duration_ms = (perf_counter() - start) * 1000
-
                 self.metrics.record_step_failure(step_name, duration_ms)
                 self.metrics.pipeline_total_failures += 1
 
@@ -135,7 +135,6 @@ class PipelineOrchestrator(Generic[InputT, OutputT]):
 
             except Exception as exc:
                 duration_ms = (perf_counter() - start) * 1000
-
                 self.metrics.record_step_failure(step_name, duration_ms)
                 self.metrics.pipeline_total_failures += 1
 
@@ -155,11 +154,13 @@ class PipelineOrchestrator(Generic[InputT, OutputT]):
                     original_exception=exc,
                 ) from exc
 
+        # Pipeline finished normally
         self.metrics.pipeline_total_success += 1
 
         logger.info({
             "event": "pipeline_end",
             "trace_id": trace_id,
         })
-        value = self.parse_output(value)
-        return value  # type: ignore[return-value]
+
+        # Normal production behavior
+        return self.parse_output(value)  # type: ignore[return-value]

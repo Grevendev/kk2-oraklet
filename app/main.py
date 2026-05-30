@@ -5,7 +5,7 @@ import uuid
 import time
 from collections import deque
 import math
-
+import sys
 import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
@@ -46,6 +46,9 @@ from app.chain.pipeline import OrakletPipeline
 # TEST MODE
 # -----------------------------------
 TESTING = os.getenv("TESTING") == "1"
+if "pytest" in sys.argv[0]:
+    TESTING = True
+
 
 
 app = FastAPI()

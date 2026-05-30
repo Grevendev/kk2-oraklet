@@ -104,7 +104,7 @@ async def ask_ai(request: Request, payload: AskRequest):
         if client_etag == etag:
             return Response(status_code=304)
 
-        response = JSONResponse(content=cached["body"])
+        response = JSONResponse(content=cached["body"].model_dump())
         response.headers["ETag"] = etag
         return response
 
@@ -135,7 +135,7 @@ async def ask_ai(request: Request, payload: AskRequest):
 
     validated = AIResponse(**result_dict)
 
-    _cache_store[cache_key] = {"body": validated.model_dump(), "etag": etag}
+    _cache_store[cache_key] = {"body": validated, "etag": etag}
 
     response = JSONResponse(content=validated.model_dump())
     response.headers["ETag"] = etag
@@ -171,7 +171,7 @@ async def ask_ai_stream(request: Request, payload: AskRequest):
     async def streamer() -> AsyncGenerator[bytes, None]:
 
         if cached is not None:
-            answer = cached["body"].get("answer", "")
+            answer = cached["body"].answer
             for i in range(0, len(answer), 256):
                 yield answer[i:i+256].encode("utf-8")
             return
@@ -205,7 +205,7 @@ async def ask_ai_stream(request: Request, payload: AskRequest):
         etag = _compute_etag(etag_payload)
 
         validated = AIResponse(**result_dict)
-        _cache_store[cache_key] = {"body": validated.model_dump(), "etag": etag}
+        _cache_store[cache_key] = {"body": validated, "etag": etag}
 
         answer = validated.answer
         for i in range(0, len(answer), 256):

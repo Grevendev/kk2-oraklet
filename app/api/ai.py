@@ -98,17 +98,21 @@ async def ask_ai(request: Request, payload: AskRequest):
         response.headers["ETag"] = etag
         return response
 
+    # ----------------------------------------------------------------------
+    # KORREKT pipeline-anrop (fungerar för både OrakletPipeline och Orchestrator)
+    # ----------------------------------------------------------------------
     try:
-        # OrakletPipeline.run(question, state)
         result = await run_in_threadpool(pipeline.run, payload.question, state)
 
     except TypeError:
-        # PipelineOrchestrator.run(input: PromptBuilderInput)
         pb_input = PromptBuilderInput(
             question=payload.question,
             stats=state.stats
         )
-        result = await run_in_threadpool(pipeline.run, pb_input)
+        try:
+            result = await run_in_threadpool(pipeline.run, pb_input)
+        except ValidationError as e:
+            raise UserError(str(e))
 
     except ValidationError as e:
         raise UserError(str(e))
@@ -117,8 +121,10 @@ async def ask_ai(request: Request, payload: AskRequest):
     except RuntimeError as e:
         raise SystemError(str(e))
 
+    # ----------------------------------------------------------------------
+
     result_dict = {
-        "question": result.question,
+        "question": payload.question,   # <-- TESTKRAV
         "answer": result.answer,
         "reasoning": result.reasoning,
         "stats_used": result.stats_used,
@@ -174,7 +180,11 @@ async def ask_ai_stream(request: Request, payload: AskRequest):
                 question=payload.question,
                 stats=state.stats
             )
-            result = await run_in_threadpool(pipeline.run, pb_input)
+            try:
+                result = await run_in_threadpool(pipeline.run, pb_input)
+            except ValidationError as e:
+                yield f"Validation error: {str(e)}".encode("utf-8")
+                return
 
         except ValidationError as e:
             yield f"Validation error: {str(e)}".encode("utf-8")
@@ -187,7 +197,7 @@ async def ask_ai_stream(request: Request, payload: AskRequest):
             return
 
         result_dict = {
-            "question": result.question,
+            "question": payload.question,   # <-- TESTKRAV
             "answer": result.answer,
             "reasoning": result.reasoning,
             "stats_used": result.stats_used,

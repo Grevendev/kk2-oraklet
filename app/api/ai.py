@@ -16,12 +16,14 @@ from app.config import logger
 from app.errors import ValidationError, UserError, SystemError
 from app.schemas import AIResponse
 
+from app.chain.steps import PromptBuilderInput  # <-- VIKTIGT
+
 import os
 TESTING = os.getenv("TESTING") == "1"
 
 
 # ---------------------------------------------------------------------------
-# 🆕 AI pipeline stub (krävs av ALLA tester)
+# AI pipeline stub (krävs av tester)
 # ---------------------------------------------------------------------------
 class AIPipelineStub:
     def run(self, question: str):
@@ -31,7 +33,6 @@ class AIPipelineStub:
         raise NotImplementedError("Pipeline not implemented")
 
 
-# Global pipeline som testerna monkeypatchar
 pipeline = AIPipelineStub()
 # ---------------------------------------------------------------------------
 
@@ -49,7 +50,6 @@ else:
     limiter = NoOpLimiter()
 
 
-# cache: (dataset_fingerprint, question_hash) -> {body, etag}
 _cache_store: Dict[Tuple[str, str], Dict[str, object]] = {}
 
 AI_RATE_LIMIT = "10/minute"
@@ -75,16 +75,6 @@ def _compute_etag(payload: dict) -> str:
 @limiter.limit(AI_RATE_LIMIT)
 async def ask_ai(request: Request, payload: AskRequest):
 
-    client_ip = request.client.host
-    request_id = request.state.request_id
-
-    logger.info({
-        "event": "ai_request_received",
-        "request_id": request_id,
-        "client_ip": client_ip,
-        "question": payload.question
-    })
-
     if not payload.question.strip():
         raise UserError("Question cannot be empty.")
 
@@ -108,19 +98,16 @@ async def ask_ai(request: Request, payload: AskRequest):
         response.headers["ETag"] = etag
         return response
 
-    # ----------------------------------------------------------------------
-    # KORREKT pipeline-anrop (fungerar för både OrakletPipeline och Orchestrator)
-    # ----------------------------------------------------------------------
     try:
         # OrakletPipeline.run(question, state)
         result = await run_in_threadpool(pipeline.run, payload.question, state)
 
     except TypeError:
-        # PipelineOrchestrator.run(input_dict)
-        pb_input = {
-            "question": payload.question,
-            "stats": state.stats
-        }
+        # PipelineOrchestrator.run(input: PromptBuilderInput)
+        pb_input = PromptBuilderInput(
+            question=payload.question,
+            stats=state.stats
+        )
         result = await run_in_threadpool(pipeline.run, pb_input)
 
     except ValidationError as e:
@@ -129,8 +116,6 @@ async def ask_ai(request: Request, payload: AskRequest):
         raise SystemError(str(e))
     except RuntimeError as e:
         raise SystemError(str(e))
-
-    # ----------------------------------------------------------------------
 
     result_dict = {
         "question": result.question,
@@ -161,16 +146,6 @@ async def ask_ai(request: Request, payload: AskRequest):
 @limiter.limit(AI_RATE_LIMIT)
 async def ask_ai_stream(request: Request, payload: AskRequest):
 
-    client_ip = request.client.host
-    request_id = request.state.request_id
-
-    logger.info({
-        "event": "ai_stream_request_received",
-        "request_id": request_id,
-        "client_ip": client_ip,
-        "question": payload.question
-    })
-
     if not payload.question.strip():
         raise UserError("Question cannot be empty.")
 
@@ -191,17 +166,14 @@ async def ask_ai_stream(request: Request, payload: AskRequest):
                 yield answer[i:i+256].encode("utf-8")
             return
 
-        # ------------------------------------------------------------------
-        # KORREKT pipeline-anrop (samma logik som /ask)
-        # ------------------------------------------------------------------
         try:
             result = await run_in_threadpool(pipeline.run, payload.question, state)
 
         except TypeError:
-            pb_input = {
-                "question": payload.question,
-                "stats": state.stats
-            }
+            pb_input = PromptBuilderInput(
+                question=payload.question,
+                stats=state.stats
+            )
             result = await run_in_threadpool(pipeline.run, pb_input)
 
         except ValidationError as e:
@@ -213,7 +185,6 @@ async def ask_ai_stream(request: Request, payload: AskRequest):
         except RuntimeError as e:
             yield f"System error: {str(e)}".encode("utf-8")
             return
-        # ------------------------------------------------------------------
 
         result_dict = {
             "question": result.question,

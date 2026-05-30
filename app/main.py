@@ -299,8 +299,12 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
         raise
     except UserError:
         raise
+    except (pa.ArrowInvalid, pa.ArrowTypeError) as e:
+        record_validation_failure()
+        raise ValidationError(str(e))
     except Exception:
         raise SystemError("Unexpected internal error")
+        
 
     # ---------------------------------------------------------
     # Schema drift

@@ -36,3 +36,12 @@ class GlobalState:
 
 
 state = GlobalState()
+
+class CircuitBreaker:
+    def __init__(self):
+        self.max_failures = 5
+        self.failure_count = 0
+        self.state = "closed"
+
+breaker = CircuitBreaker()
+

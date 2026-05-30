@@ -109,7 +109,7 @@ async def ask_ai(request: Request, payload: AskRequest):
         return response
 
     try:
-        result = await run_in_threadpool(pipeline.run, payload.question)
+        result = await run_in_threadpool(pipeline.run, payload.question, state)
     except ValidationError as e:
         raise UserError(str(e))
     except TimeoutError as e:
@@ -174,7 +174,7 @@ async def ask_ai_stream(request: Request, payload: AskRequest):
             return
 
         try:
-            result = await run_in_threadpool(pipeline.run, payload.question)
+            result = await run_in_threadpool(pipeline.run, payload.question, state)
         except ValidationError as e:
             yield f"Validation error: {str(e)}".encode("utf-8")
             return

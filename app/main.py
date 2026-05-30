@@ -206,8 +206,8 @@ class CircuitBreakerMiddleware(BaseHTTPMiddleware):
             )
         return await call_next(request)
 
-
-app.add_middleware(CircuitBreakerMiddleware)
+if not TESTING:
+    app.add_middleware(CircuitBreakerMiddleware)
 
 
 # -----------------------------------

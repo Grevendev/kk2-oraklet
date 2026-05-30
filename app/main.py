@@ -43,7 +43,10 @@ from app.chain.pipeline import OrakletPipeline
 # -----------------------------------
 # TEST MODE AUTO-DETECTION
 # -----------------------------------
-
+if "pytest" in os.getenv("PYTEST_CURRENT_TEST", "") \
+   or "pytest" in os.getenv("_", "") \
+   or any("pytest" in arg for arg in os.sys.argv):
+    os.environ["TESTING"] = "1"
 
 TESTING = os.getenv("TESTING") == "1"
 

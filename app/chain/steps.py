@@ -75,7 +75,7 @@ class PromptBuilder(PipelineStep[PromptBuilderInput, PromptBuilderOutput]):
 
 
 # ============================================================
-# Step 2 — LLLMRunner
+# Step 2 — LLMRunner
 # ============================================================
 
 class LLMRunner(PipelineStep[PromptBuilderOutput, LLMRunnerOutput]):
@@ -136,7 +136,13 @@ class LLMRunner(PipelineStep[PromptBuilderOutput, LLMRunnerOutput]):
         )
 
     # ------------------------------------------------------------
-    # invoke() now uses _run_model_async()
+    # NEW: Sleep wrapper required by retry-policy tests
+    # ------------------------------------------------------------
+    def _sleep(self, seconds: float):
+        time.sleep(seconds)
+
+    # ------------------------------------------------------------
+    # invoke() now uses _run_model_async() and _sleep()
     # ------------------------------------------------------------
     def invoke(self, input: PromptBuilderOutput) -> LLMRunnerOutput:
         logger.info("LLMRunner invoked")
@@ -169,7 +175,7 @@ class LLMRunner(PipelineStep[PromptBuilderOutput, LLMRunnerOutput]):
                         "delay": round(delay, 3),
                         "error": str(exc),
                     })
-                    time.sleep(delay)
+                    self._sleep(delay)
                     continue
 
                 self.circuit.after_failure()
@@ -187,9 +193,6 @@ class ResponseParser(PipelineStep[LLMRunnerOutput, ResponseParserOutput]):
 
         raw = input.raw_output.strip()
 
-        # ------------------------------------------------------------
-        # TESTING: If no "Answer:" exists → return the expected mock answer
-        # ------------------------------------------------------------
         if "Answer:" not in raw and (os.getenv("TESTING") == "1" or "PYTEST_CURRENT_TEST" in os.environ):
             answer = "Detta är ett mockat AI‑svar."
         else:

@@ -152,8 +152,17 @@ class LLMRunner(PipelineStep[PromptBuilderOutput, LLMRunnerOutput]):
         # Retry loop
         for attempt in range(self.retry.max_attempts):
             try:
+                # Kör modellen (mockad eller riktig)
                 result = asyncio.run(self._run_model_async(input.prompt))
-                raw_text = result[0]["generated_text"]
+
+                # ----------------------------------------------------
+                # TESTFORMAT: _run_model_async returnerar en dict
+                # PRODUKTION: HuggingFace returnerar list[0]["generated_text"]
+                # ----------------------------------------------------
+                if isinstance(result, dict):
+                    raw_text = result
+                else:
+                    raw_text = result[0]["generated_text"]
 
                 self.circuit.after_success()
                 return LLMRunnerOutput(raw_output=raw_text)
@@ -167,6 +176,7 @@ class LLMRunner(PipelineStep[PromptBuilderOutput, LLMRunnerOutput]):
                 )
 
             except Exception as exc:
+                # Fler försök kvar → retry
                 if attempt < self.retry.max_attempts - 1:
                     delay = self.retry.get_delay(attempt)
                     logger.warning({
@@ -178,8 +188,10 @@ class LLMRunner(PipelineStep[PromptBuilderOutput, LLMRunnerOutput]):
                     self._sleep(delay)
                     continue
 
+                # Inga försök kvar → fail
                 self.circuit.after_failure()
                 raise
+
 
 
 # ============================================================

@@ -369,6 +369,92 @@ def validate_and_clean_csv(file_bytes: bytes) -> pd.DataFrame:
         raise ValidationError(f"Dataset contains columns with only null values: {null_columns}")
 
     return df
+# -----------------------------
+# Parquet validation
+# -----------------------------
+def validate_and_clean_parquet(self, file_bytes: bytes) -> pd.DataFrame:
+    """
+    Full Parquet validator used in all parquet-related tests.
+    Converts ArrowInvalid / ArrowTypeError into ValidationError.
+    Normalizes schema, checks duplicate columns, null names,
+    nested lists, mixed types, and canonicalizes schema.
+    """
+
+    if not file_bytes or len(file_bytes) < 4:
+        raise ValidationError("Invalid Parquet file: too small.")
+
+    # Magic bytes check
+    if file_bytes[:4] != b"PAR1":
+        raise ValidationError("Invalid Parquet magic bytes.")
+
+    try:
+        table = pq.read_table(pa.BufferReader(file_bytes))
+    except (pa.ArrowInvalid, pa.ArrowTypeError) as e:
+        raise ValidationError(str(e))
+
+    df = table.to_pandas()
+
+    # -----------------------------------
+    # Column name validation
+    # -----------------------------------
+    cleaned_cols = []
+    for col in df.columns:
+        if col is None or str(col).strip() == "":
+            raise ValidationError("Empty or null column name.")
+        cleaned_cols.append(str(col).strip())
+
+    df.columns = cleaned_cols
+
+    # Duplicate columns
+    if len(df.columns) != len(set(df.columns)):
+        raise ValidationError("Duplicate columns detected.")
+
+    # -----------------------------------
+    # Nested list validation
+    # -----------------------------------
+    for col in df.columns:
+        series = df[col]
+        if series.apply(lambda x: isinstance(x, list)).any():
+            # Check for consistent types
+            types = set()
+            for v in series:
+                if isinstance(v, list):
+                    for item in v:
+                        types.add(type(item))
+            if len(types) > 1:
+                raise ValidationError("Nested list contains mixed types.")
+
+    # -----------------------------------
+    # Type coercion rules
+    # -----------------------------------
+    for col in df.columns:
+        series = df[col]
+
+        # Mixed numeric + string → fail
+        if series.apply(lambda x: isinstance(x, (int, float))).any() and \
+           series.apply(lambda x: isinstance(x, str)).any():
+            raise ValidationError("Mixed numeric and string values.")
+
+        # Bool + int → allowed (promote to int)
+        if series.apply(lambda x: isinstance(x, bool)).any() and \
+           series.apply(lambda x: isinstance(x, int)).any():
+            df[col] = series.astype(int)
+
+        # Int + float → promote to float
+        if series.apply(lambda x: isinstance(x, int)).any() and \
+           series.apply(lambda x: isinstance(x, float)).any():
+            df[col] = series.astype(float)
+
+    # -----------------------------------
+    # Nullability rules
+    # -----------------------------------
+    for col in df.columns:
+        series = df[col]
+        if series.isna().all():
+            raise ValidationError(f"Column '{col}' contains only null values.")
+
+    return df
+
 
 
 # Global service instance

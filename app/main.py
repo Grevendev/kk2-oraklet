@@ -317,6 +317,17 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
     state.stats = data_service.get_stats()
     state.schema_fingerprint = data_service._schema_fingerprint
 
+
+    # ---------------------------------------------------------
+    # Column lineage tracking
+    # ---------------------------------------------------------
+    if not hasattr(state, "column_lineage") or state.column_lineage is None:
+        state.column_lineage = {}
+
+    for col in df.columns:
+        normalized = data_service._normalize(col)
+        dtype = str(df[col].dtype)
+        state.column_lineage[normalized] = dtype
     clear_ai_cache()
 
     return UploadResponse(
@@ -324,6 +335,8 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
         columns=list(df.columns),
         dtypes={col: str(dtype) for col, dtype in df.dtypes.items()}
     )
+
+
 
 
 # -----------------------------------

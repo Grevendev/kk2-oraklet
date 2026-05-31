@@ -129,6 +129,15 @@ class DataService:
         self._stats_timestamp = datetime.utcnow()
         return stats
 
+    def get_stats_etag(self) -> str:
+        """
+        Returns a stable ETag source value for the current stats/dataset.
+        For now we base it purely on the data fingerprint.
+        """
+        if self._data_fingerprint is None:
+            raise ValidationError("No dataset uploaded yet.")
+        return self._data_fingerprint
+
     # ---------------------------------------------------------
     # CSV / Parquet getters
     # ---------------------------------------------------------
@@ -201,7 +210,7 @@ class DataService:
                     raise ValidationError("Mixed int and float values.")
 
         # ---------------------------------------------------------
-        # pandas conversion (NEW: catch ArrowTypeError here)
+        # pandas conversion (catch ArrowTypeError/ArrowInvalid here)
         # ---------------------------------------------------------
         try:
             df = table.to_pandas()

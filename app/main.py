@@ -6,16 +6,11 @@ import time
 from collections import deque
 import math
 import sys
-import pandas as pd
-import pyarrow as pa
-import pyarrow.parquet as pq
 
 from fastapi import FastAPI, UploadFile, File, HTTPException, Request
 from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.concurrency import run_in_threadpool
 
-from slowapi import Limiter
-from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 
 from fastapi.middleware.cors import CORSMiddleware
@@ -48,6 +43,7 @@ from app.chain.pipeline import OrakletPipeline
 TESTING = os.getenv("TESTING") == "1"
 if "pytest" in sys.argv[0]:
     TESTING = True
+
 if TESTING:
     class NoOpLimiter:
         def limit(self, *args, **kwargs):
@@ -61,8 +57,8 @@ else:
     limiter = Limiter(key_func=get_remote_address)
 
 
-
 app = FastAPI()
+
 
 # -----------------------------------
 # GLOBAL RATE ANOMALY TRACKER
@@ -70,6 +66,7 @@ app = FastAPI()
 REQUEST_WINDOW_SECONDS = 10
 MAX_REQUESTS_IN_WINDOW = 200
 recent_requests = deque()
+
 
 # -----------------------------------
 # CIRCUIT BREAKER STATE
@@ -129,12 +126,6 @@ app.add_middleware(
 
 
 # -----------------------------------
-# RATE LIMITER (DISABLED IN TEST MODE)
-# -----------------------------------
-
-
-
-# -----------------------------------
 # SECURITY HEADERS
 # -----------------------------------
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
@@ -166,7 +157,7 @@ app.add_middleware(RequestIDMiddleware)
 
 
 # -----------------------------------
-# GLOBAL RATE ANOMALY DETECTION (DISABLED IN TEST MODE)
+# GLOBAL RATE ANOMALY DETECTION
 # -----------------------------------
 class GlobalRateAnomalyMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
@@ -210,6 +201,7 @@ class CircuitBreakerMiddleware(BaseHTTPMiddleware):
                 }
             )
         return await call_next(request)
+
 
 if not TESTING:
     app.add_middleware(CircuitBreakerMiddleware)
@@ -266,9 +258,6 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
     filename = file.filename.lower()
     content_type = (file.content_type or "").lower()
 
-    # ---------------------------------------------------------
-    # MIME / extension guard
-    # ---------------------------------------------------------
     is_csv = filename.endswith(".csv")
     is_parquet = filename.endswith(".parquet")
 
@@ -276,7 +265,6 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
         record_validation_failure()
         raise ValidationError("Unsupported file type.")
 
-    # Parquet MIME check
     if is_parquet and content_type not in [
         "application/octet-stream",
         "application/x-parquet",
@@ -296,20 +284,13 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
     except ValidationError:
         record_validation_failure()
         raise
-
-    
-
     except UserError:
         raise
-
     except Exception:
         raise SystemError("Unexpected internal error")
 
-    # ---------------------------------------------------------
-    # Schema drift
-    # ---------------------------------------------------------
     df.columns = [data_service._normalize(col) for col in df.columns]
-    
+
     if data_service._df is not None:
         if data_service.is_schema_changed(df):
             if state.schema_drift_blocking:
@@ -320,10 +301,6 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
     state.stats = data_service.get_stats()
     state.schema_fingerprint = data_service._schema_fingerprint
 
-
-    # ---------------------------------------------------------
-    # Column lineage tracking
-    # ---------------------------------------------------------
     if not hasattr(state, "column_lineage") or state.column_lineage is None:
         state.column_lineage = {}
 
@@ -331,6 +308,7 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
         normalized = data_service._normalize(col)
         dtype = str(df[col].dtype)
         state.column_lineage[normalized] = dtype
+
     clear_ai_cache()
 
     return UploadResponse(
@@ -338,8 +316,6 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
         columns=list(df.columns),
         dtypes={col: str(dtype) for col, dtype in df.dtypes.items()}
     )
-
-
 
 
 # -----------------------------------
@@ -353,12 +329,18 @@ def get_stats(request: Request):
 
     stats = data_service.get_stats()
 
-    safe_stats = {
-        k: (None if isinstance(v, float) and math.isnan(v) else v)
-        for k, v in stats.items()
-    }
+    def clean(v):
+        if isinstance(v, float) and math.isnan(v):
+            return None
+        if isinstance(v, dict):
+            return {kk: clean(vv) for kk, vv in v.items()}
+        return v
 
-    etag = f'"{data_service.get_stats_etag()}"'
+    safe_stats = {k: clean(v) for k, v in stats.items()}
+
+    etag_value = data_service.get_stats_etag()
+    etag = f'"{etag_value}"'
+
     if request.headers.get("If-None-Match") == etag:
         return Response(status_code=304)
 

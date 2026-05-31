@@ -8,8 +8,10 @@ from app.main import app
 from app.data import data_service
 from app.state import state
 from app.container_test import get_test_pipeline
+from app.api.ai import AI_RATE_LIMIT
 
 os.environ["TESTING"] = "1"
+
 
 
 @pytest.fixture(autouse=True)
@@ -49,3 +51,22 @@ def client():
     Ger en TestClient som använder den patchade test-pipelinen.
     """
     return TestClient(app)
+
+@pytest.fixture(autouse=True)
+def disable_rate_limit(monkeypatch):
+    from app.api import ai
+
+    # Ta bort SlowAPI's rate-limit attribut
+    if hasattr(ai.ask_ai, "_rate_limit"):
+        monkeypatch.delattr(ai.ask_ai, "_rate_limit", raising=False)
+
+    if hasattr(ai.ask_ai_stream, "_rate_limit"):
+        monkeypatch.delattr(ai.ask_ai_stream, "_rate_limit", raising=False)
+
+    # Ta bort SlowAPI dependencies från FastAPI-routen
+    for route in ai.router.routes:
+        if hasattr(route, "dependant"):
+            route.dependant.dependencies = [
+                d for d in route.dependant.dependencies
+                if "slowapi" not in str(d.call)
+            ]

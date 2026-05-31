@@ -108,15 +108,33 @@ class DataService:
             return self._stats_cache
 
         stats: Dict[str, Any] = {}
-        for col in self._df.select_dtypes(include=["number"]).columns:
+
+        for col in self._df.columns:
             s = self._df[col]
-            stats[col] = {
-                "mean": float(s.mean()),
-                "min": float(s.min()),
-                "max": float(s.max()),
-                "std": float(s.std()),
+
+            col_stats: Dict[str, Any] = {
                 "count": int(s.count()),
+                "dtype": str(s.dtype),
             }
+
+            if pd.api.types.is_numeric_dtype(s):
+                col_stats.update(
+                    {
+                        "mean": float(s.mean()),
+                        "min": float(s.min()),
+                        "max": float(s.max()),
+                        "std": float(s.std()),
+                    }
+                )
+            else:
+                # undvik nunique på list/array-värden
+                has_unhashable = s.apply(
+                    lambda v: isinstance(v, (list, tuple)) or getattr(v, "__array__", None) is not None
+                ).any()
+                if not has_unhashable:
+                    col_stats["unique"] = int(s.nunique(dropna=True))
+
+            stats[col] = col_stats
 
         stats["_metadata"] = {
             "rows": int(self._df.shape[0]),
@@ -128,6 +146,7 @@ class DataService:
         self._stats_cache = stats
         self._stats_timestamp = datetime.utcnow()
         return stats
+
 
     def get_stats_etag(self) -> str:
         """

@@ -18,6 +18,7 @@ def test_ai_cache_miss(monkeypatch):
             self.answer = "Mockat svar"
             self.model = "test-model"
             self.stats_used = {}
+            self.reasoning = "Mockad reasoning"
 
     run_spy = MagicMock(return_value=FakeParsed())
     monkeypatch.setattr(PipelineOrchestrator, "run", run_spy)

@@ -107,14 +107,15 @@ async def ask_ai(request: Request, payload: AskRequest):
     # CACHE HIT
     # ---------------------------------------------------------
     cached = _cache_store.get(cache_key)
-    if cached is not None:
+    if client_etag is not None and cached is not None:
         if client_etag == cached["etag"]:
             return Response(status_code=304)
-
+        
         body: AIResponse = cached["body"]
         resp = JSONResponse(content=body.model_dump())
         resp.headers["ETag"] = cached["etag"]
         return resp
+
 
     # ---------------------------------------------------------
     # Kör pipeline.run

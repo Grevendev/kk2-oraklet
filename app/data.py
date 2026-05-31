@@ -42,9 +42,8 @@ class DataService:
     # ---------------------------------------------------------
     # Schema fingerprint
     # ---------------------------------------------------------
-
     def _normalize(self, name: str) -> str:
-    # Lowercase
+        # Lowercase
         name = name.lower()
 
         # Trim whitespace
@@ -62,7 +61,6 @@ class DataService:
             name = name.replace("__", "_")
 
         return name
-
 
     def compute_schema_fingerprint(self, df: pd.DataFrame) -> str:
         schema = {
@@ -156,7 +154,7 @@ class DataService:
             raise ValidationError("Invalid Parquet magic bytes.")
 
         # ---------------------------------------------------------
-        # READ METADATA FIRST (avoid PyArrow auto-errors)
+        # READ METADATA FIRST
         # ---------------------------------------------------------
         try:
             parquet_file = pq.ParquetFile(pa.BufferReader(file_bytes))
@@ -173,31 +171,49 @@ class DataService:
             raise ValidationError("Duplicate columns detected.")
 
         # ---------------------------------------------------------
-        # READ TABLE (catch mixed datatype errors)
+        # READ TABLE
         # ---------------------------------------------------------
         try:
             table = parquet_file.read()
         except (pa.ArrowInvalid, pa.ArrowTypeError) as e:
             raise ValidationError("Invalid Parquet data: " + str(e))
-        
-        # Detect mixed int + float BEFORE pandas conversion
-        for col_idx, field in enumerate(table.schema):
+
+        # ---------------------------------------------------------
+        # Arrow chunk-type detection (kept as-is)
+        # ---------------------------------------------------------
+        for col_idx in range(table.num_columns):
             column = table.column(col_idx)
 
             seen_int = False
             seen_float = False
 
             for chunk in column.chunks:
-                for value in chunk.to_pylist():
-                    if isinstance(value, int):
-                        seen_int = True
-                    elif isinstance(value, float):
-                        seen_float = True
+                arrow_type = chunk.type
 
-                    if seen_int and seen_float:
-                        raise ValidationError("Mixed int and float values.")
+                if pa.types.is_integer(arrow_type):
+                    seen_int = True
+                elif pa.types.is_floating(arrow_type):
+                    seen_float = True
+
+                if seen_int and seen_float:
+                    raise ValidationError("Mixed int and float values.")
 
         df = table.to_pandas()
+
+        # ---------------------------------------------------------
+        # NEW: pandas-level mixed int/float detection
+        # ---------------------------------------------------------
+        for col in df.columns:
+            s = df[col]
+
+            if pd.api.types.is_float_dtype(s):
+                non_null = s.dropna()
+                if non_null.empty:
+                    continue
+
+                is_int_like = non_null.apply(lambda v: float(v).is_integer())
+                if is_int_like.any() and (~is_int_like).any():
+                    raise ValidationError("Mixed int and float values.")
 
         # ---------------------------------------------------------
         # Column name validation
@@ -239,13 +255,6 @@ class DataService:
             if s.apply(lambda x: isinstance(x, bool)).any() and \
                s.apply(lambda x: isinstance(x, int)).any():
                 df[col] = s.astype(int)
-
-        # Int + float → promote to float
-        for col in df.columns:
-            s = df[col]
-            if s.apply(lambda x: isinstance(x, int)).any() and \
-               s.apply(lambda x: isinstance(x, float)).any():
-                raise ValidationError("Mixed int and float values.")
 
         # Nullability
         for col in df.columns:
@@ -311,7 +320,6 @@ def validate_and_clean_csv(file_bytes: bytes) -> pd.DataFrame:
         cleaned_columns.append(new_col)
 
     df.columns = cleaned_columns
-
 
     # Drop fully empty columns
     df = df.dropna(axis=1, how="all")

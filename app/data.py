@@ -314,8 +314,8 @@ def validate_and_clean_csv(file_bytes: bytes) -> pd.DataFrame:
     except UnicodeDecodeError:
         df = pd.read_csv(pd.io.common.BytesIO(file_bytes), encoding="latin-1", delimiter=delimiter)
 
-    if df.empty:
-        raise ValidationError("CSV file is empty or contains no rows.")
+    if df.columns.duplicated().any():
+        raise ValidationError("Duplicate column names detected.")
 
     # Early numeric inference
     for col in df.columns:

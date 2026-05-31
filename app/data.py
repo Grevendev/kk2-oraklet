@@ -175,7 +175,14 @@ class DataService:
         # ---------------------------------------------------------
         try:
             table = parquet_file.read()
-        except (pa.ArrowInvalid, pa.ArrowTypeError) as e:
+        except pa.ArrowTypeError:
+            # Fallback: read columns individueally so nested-list validator can run
+            columns = []
+            for i in range(parquet_file.schema_arrow.num_fields):
+                col = parquet_file.read_column(i)
+                columns.append(col)
+            table = pa.Table.from_arrays(columns, schema.names)
+        except pa.ArrowInvalid as e:
             raise ValidationError("Invalid Parquet data: " + str(e))
 
         # ---------------------------------------------------------

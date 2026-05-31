@@ -179,6 +179,23 @@ class DataService:
             table = parquet_file.read()
         except (pa.ArrowInvalid, pa.ArrowTypeError) as e:
             raise ValidationError("Invalid Parquet data: " + str(e))
+        
+        # Detect mixed int + float BEFORE pandas conversion
+        for col_idx, field in enumerate(table.schema):
+            column = table.column(col_idx)
+
+            seen_int = False
+            seen_float = False
+
+            for chunk in column.chunks:
+                for value in chunk.to_pylist():
+                    if isinstance(value, int):
+                        seen_int = True
+                    elif isinstance(value, float):
+                        seen_float = True
+
+                    if seen_int and seen_float:
+                        raise ValidationError("Mixed int and float values.")
 
         df = table.to_pandas()
 
@@ -228,7 +245,7 @@ class DataService:
             s = df[col]
             if s.apply(lambda x: isinstance(x, int)).any() and \
                s.apply(lambda x: isinstance(x, float)).any():
-                df[col] = s.astype(float)
+                raise ValidationError("Mixed int and float values.")
 
         # Nullability
         for col in df.columns:

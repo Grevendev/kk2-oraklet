@@ -434,7 +434,7 @@ def validate_and_clean_csv(file_bytes: bytes) -> pd.DataFrame:
         raise ValidationError(f"Dataset contains {total_cells:,} cells, exceeding the limit of {MAX_CELLS:,}.")
 
     if len(numeric_cols) < MIN_NUMERIC_COLUMNS:
-        raise ValidationError("Dataset must contain at least one numeric column for analysis.")
+        raise ValidationError("Dataset must contain at least one number column for analysis.")
 
     id_like_columns = [col for col in df.columns if df[col].nunique() == df.shape[0]]
 

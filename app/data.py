@@ -175,8 +175,7 @@ class DataService:
         # ---------------------------------------------------------
         try:
             table = parquet_file.read()
-        except pa.ArrowTypeError as e:
-            # Mixed nested list types cause ArrowTypeError before table read
+        except pa.ArrowTypeError:
             raise ValidationError("Nested list contains mixed types.")
         except pa.ArrowInvalid as e:
             raise ValidationError("Invalid Parquet data: " + str(e))
@@ -201,10 +200,16 @@ class DataService:
                 if seen_int and seen_float:
                     raise ValidationError("Mixed int and float values.")
 
-        df = table.to_pandas()
+        # ---------------------------------------------------------
+        # pandas conversion (NEW: catch ArrowTypeError here)
+        # ---------------------------------------------------------
+        try:
+            df = table.to_pandas()
+        except pa.ArrowTypeError:
+            raise ValidationError("Nested list contains mixed types.")
 
         # ---------------------------------------------------------
-        # NEW: pandas-level mixed int/float detection
+        # pandas-level mixed int/float detection
         # ---------------------------------------------------------
         for col in df.columns:
             s = df[col]

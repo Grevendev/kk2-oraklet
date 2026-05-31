@@ -292,7 +292,7 @@ def validate_and_clean_csv(file_bytes: bytes) -> pd.DataFrame:
         raise ValidationError("CSV file is empty.")
 
     MAX_SIZE_MB = 10
-    MAX_COLUMNS = 100
+    MAX_COLUMNS = 50
     MIN_NUMERIC_COLUMNS = 1
 
     size_mb = len(file_bytes) / (1024 * 1024)

@@ -19,31 +19,17 @@ from app.schemas import AIResponse
 from app.chain.steps import PromptBuilderInput
 from app.chain.pipeline import OrakletPipeline
 from datetime import datetime, timedelta
-pipeline = OrakletPipeline()
 
+# Denna pipeline patchas i tests/conftest.py:
+# monkeypatch.setattr(ai, "pipeline", get_test_pipeline())
+pipeline = OrakletPipeline()
 
 # ---------------------------------------------------------
 # Pytest-detektion
 # ---------------------------------------------------------
 IS_PYTEST = "PYTEST_CURRENT_TEST" in os.environ
 
-
-# ---------------------------------------------------------
-# Dynamisk pipeline-resolver
-# ---------------------------------------------------------
-def get_pipeline():
-    """
-    Hämtar pipeline från global state.
-    Om den saknas skapas en ny OrakletPipeline.
-    Detta fixar buggen där pipeline låstes vid import.
-    """
-    if state.pipeline is None:
-        state.pipeline = OrakletPipeline()
-    return state.pipeline
-
-
 router = APIRouter(prefix="/ai", tags=["AI"])
-
 
 # ---------------------------------------------------------
 # Rate limiter (inaktiverad i pytest)
@@ -59,7 +45,6 @@ else:
     limiter = NoOpLimiter()
 
 AI_RATE_LIMIT = "10/minute"
-
 
 # ---------------------------------------------------------
 # CACHE
@@ -110,18 +95,15 @@ async def ask_ai(request: Request, payload: AskRequest):
     if client_etag is not None and cached is not None:
         if client_etag == cached["etag"]:
             return Response(status_code=304)
-        
+
         body: AIResponse = cached["body"]
         resp = JSONResponse(content=body.model_dump())
         resp.headers["ETag"] = cached["etag"]
         return resp
 
-
     # ---------------------------------------------------------
-    # Kör pipeline.run
+    # Kör pipeline.run (pipeline patchas i tester)
     # ---------------------------------------------------------
-    pipeline = get_pipeline()
-
     try:
         result = await run_in_threadpool(pipeline.run, payload.question)
     except TypeError:
@@ -192,8 +174,6 @@ async def ask_ai_stream(request: Request, payload: AskRequest):
 
     cached = _cache_store.get(cache_key)
 
-    pipeline = get_pipeline()
-
     async def streamer() -> AsyncGenerator[bytes, None]:
 
         # ---------------------------------------------------------
@@ -207,7 +187,7 @@ async def ask_ai_stream(request: Request, payload: AskRequest):
             return
 
         # ---------------------------------------------------------
-        # Kör pipeline.run
+        # Kör pipeline.run (pipeline patchas i tester)
         # ---------------------------------------------------------
         try:
             result = await run_in_threadpool(pipeline.run, payload.question)

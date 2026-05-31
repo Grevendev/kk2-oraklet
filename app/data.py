@@ -308,7 +308,11 @@ def validate_and_clean_csv(file_bytes: bytes) -> pd.DataFrame:
         delimiter = "\t"
 
     logger.info(f"Detected delimiter: '{delimiter}'")
-
+    
+    header_line = sample.split("\n", 1)[0]
+    raw_cols = [c.strip() for c in header_line.split(delimiter)]
+    if len(raw_cols) != len(set(raw_cols)):
+        raise ValidationError("Duplicate column names detected.")
     try:
         df = pd.read_csv(pd.io.common.BytesIO(file_bytes), encoding="utf-8", delimiter=delimiter)
     except UnicodeDecodeError:

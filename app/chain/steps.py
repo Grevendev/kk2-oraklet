@@ -48,6 +48,13 @@ class ResponseParserOutput(BaseModel):
 
 
 # ============================================================
+# Global Circuit Breaker (delas mellan LLMRunner och API)
+# ============================================================
+
+GLOBAL_CIRCUIT_BREAKER = CircuitBreaker()
+
+
+# ============================================================
 # Step 1 — PromptBuilder
 # ============================================================
 
@@ -84,14 +91,12 @@ class LLMRunner(PipelineStep[PromptBuilderOutput, LLMRunnerOutput]):
     _pipeline_lock = threading.Lock()
 
     def __init__(self):
-        self.circuit = CircuitBreaker()
+        # Alla LLMRunner delar samma CB
+        self.circuit = GLOBAL_CIRCUIT_BREAKER
         self.retry = RetryPolicy()
 
     @classmethod
     def _get_pipeline(cls):
-        # ----------------------------------------------------
-        # ALWAYS use FakeHF when pytest is running
-        # ----------------------------------------------------
         if os.getenv("TESTING") == "1" or "PYTEST_CURRENT_TEST" in os.environ:
             class FakeHF:
                 def __call__(self, prompt, **_):
@@ -103,9 +108,6 @@ class LLMRunner(PipelineStep[PromptBuilderOutput, LLMRunnerOutput]):
                     }]
             return FakeHF()
 
-        # ----------------------------------------------------
-        # REAL MODEL
-        # ----------------------------------------------------
         if cls._pipeline is None:
             with cls._pipeline_lock:
                 if cls._pipeline is None:
@@ -116,9 +118,6 @@ class LLMRunner(PipelineStep[PromptBuilderOutput, LLMRunnerOutput]):
                     )
         return cls._pipeline
 
-    # ------------------------------------------------------------
-    # Primary async model runner (used by retry tests)
-    # ------------------------------------------------------------
     async def _run_model_async(self, prompt: str):
         generator = self._get_pipeline()
 
@@ -135,40 +134,23 @@ class LLMRunner(PipelineStep[PromptBuilderOutput, LLMRunnerOutput]):
             timeout=LLM_TIMEOUT_SECONDS
         )
 
-    # ------------------------------------------------------------
-    # NEW: fallback async runner (required by fallback tests)
-    # ------------------------------------------------------------
     async def _run_fallback_async(self, prompt: str):
-        """
-        Fallback-model used when primary model fails.
-        Tests expect this method to exist and return a dict.
-        """
         return {
             "generated_text": f"{prompt}\n\nAnswer: Detta är ett fallback‑svar."
         }
 
-    # ------------------------------------------------------------
-    # Sleep wrapper (mocked in retry tests)
-    # ------------------------------------------------------------
     def _sleep(self, seconds: float):
         time.sleep(seconds)
 
-    # ------------------------------------------------------------
-    # invoke() with retry + fallback + circuit breaker
-    # ------------------------------------------------------------
     def invoke(self, input: PromptBuilderOutput) -> LLMRunnerOutput:
         logger.info("LLMRunner invoked")
 
         self.circuit.before_call()
 
-        # -----------------------------
-        # RETRY LOOP
-        # -----------------------------
         for attempt in range(self.retry.max_attempts):
             try:
                 result = asyncio.run(self._run_model_async(input.prompt))
 
-                # TESTFORMAT: dict
                 if isinstance(result, dict):
                     raw_text = result
                 else:
@@ -178,7 +160,6 @@ class LLMRunner(PipelineStep[PromptBuilderOutput, LLMRunnerOutput]):
                 return LLMRunnerOutput(raw_output=raw_text)
 
             except Exception as exc:
-                # Retry if attempts remain
                 if attempt < self.retry.max_attempts - 1:
                     delay = self.retry.get_delay(attempt)
                     logger.warning({
@@ -190,9 +171,6 @@ class LLMRunner(PipelineStep[PromptBuilderOutput, LLMRunnerOutput]):
                     self._sleep(delay)
                     continue
 
-                # -----------------------------
-                # FALLBACK AFTER FINAL FAILURE
-                # -----------------------------
                 try:
                     fallback = asyncio.run(self._run_fallback_async(input.prompt))
                     self.circuit.after_failure()
@@ -206,8 +184,6 @@ class LLMRunner(PipelineStep[PromptBuilderOutput, LLMRunnerOutput]):
                     )
 
 
-
-
 # ============================================================
 # Step 3 — ResponseParser
 # ============================================================
@@ -219,9 +195,7 @@ class ResponseParser(PipelineStep[LLMRunnerOutput, ResponseParserOutput]):
 
         raw_output = input.raw_output
 
-        # Testläge: LLMRunner kan ge en dict (t.ex. {"answer": "Retry success"})
         if isinstance(raw_output, dict):
-            # Försök plocka ut något vettigt, annars str() som fallback
             raw_text = (
                 raw_output.get("generated_text")
                 or raw_output.get("answer")
@@ -248,7 +222,6 @@ class ResponseParser(PipelineStep[LLMRunnerOutput, ResponseParserOutput]):
             stats_used={"temp": {"mean": 10}},
             model=MODEL_NAME
         )
-
 
 
 # ============================================================

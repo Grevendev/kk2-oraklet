@@ -18,7 +18,8 @@ class CircuitBreaker:
         self.recovery_time_sec = recovery_time_sec
 
         self.failures = 0
-        self.state = "closed"  # closed, open, half-open
+        # Tester använder "CLOSED", "OPEN", "HALF_OPEN"
+        self.state = "CLOSED"
         self.opened_at = 0.0
 
     # ---------------------------------------------------------
@@ -26,28 +27,34 @@ class CircuitBreaker:
     # ---------------------------------------------------------
     @property
     def max_failures(self) -> int:
-        """Tests expect this attribute."""
         return self.failure_threshold
+
+    @max_failures.setter
+    def max_failures(self, value: int) -> None:
+        self.failure_threshold = value
 
     @property
     def failure_count(self) -> int:
-        """Tests expect this attribute."""
         return self.failures
+
+    @failure_count.setter
+    def failure_count(self, value: int) -> None:
+        self.failures = value
 
     # ---------------------------------------------------------
     # Internal mechanics
     # ---------------------------------------------------------
     def _trip(self) -> None:
-        self.state = "open"
+        self.state = "OPEN"
         self.opened_at = time.time()
 
     def _can_recover(self) -> bool:
         return (time.time() - self.opened_at) >= self.recovery_time_sec
 
     def before_call(self) -> None:
-        if self.state == "open":
+        if self.state == "OPEN":
             if self._can_recover():
-                self.state = "half-open"
+                self.state = "HALF_OPEN"
             else:
                 raise PipelineError(
                     message="Circuit breaker is OPEN — LLM temporarily disabled.",
@@ -56,7 +63,7 @@ class CircuitBreaker:
 
     def after_success(self) -> None:
         self.failures = 0
-        self.state = "closed"
+        self.state = "CLOSED"
 
     def after_failure(self) -> None:
         self.failures += 1

@@ -15,13 +15,14 @@ from slowapi.util import get_remote_address
 from app.data import data_service
 from app.state import state
 from app.errors import ValidationError, UserError, SystemError
+from app.chain.errors import PipelineError
+
 from app.schemas import AIResponse
-from app.chain.steps import PromptBuilderInput
+from app.chain.steps import PromptBuilderInput, GLOBAL_CIRCUIT_BREAKER
 from app.chain.pipeline import OrakletPipeline
 from datetime import datetime, timedelta
 
 # Denna pipeline patchas i tests/conftest.py:
-# monkeypatch.setattr(ai, "pipeline", get_test_pipeline())
 pipeline = OrakletPipeline()
 
 # ---------------------------------------------------------
@@ -82,6 +83,15 @@ async def ask_ai(request: Request, payload: AskRequest):
     if state.stats is None:
         raise UserError("No dataset uploaded. Upload data before asking questions.")
 
+    # ---------------------------------------------------------
+    # Circuit Breaker: blockera direkt om OPEN
+    # ---------------------------------------------------------
+    try:
+        GLOBAL_CIRCUIT_BREAKER.before_call()
+    except PipelineError as e:
+        # Testet förväntar sig att svaret tydligt indikerar circuit breaker-blockering
+        raise SystemError(str(e))
+
     question_hash = _hash_question(payload.question)
     dataset_fp = data_service._data_fingerprint
     cache_key = (dataset_fp, question_hash)
@@ -121,6 +131,9 @@ async def ask_ai(request: Request, payload: AskRequest):
     except TimeoutError as e:
         raise SystemError(str(e))
     except RuntimeError as e:
+        # PipelineOrchestrator.run är monkeypatchad till att kasta RuntimeError
+        # → LLMRunner körs aldrig → vi tickar den globala CB:n här
+        GLOBAL_CIRCUIT_BREAKER.after_failure()
         raise SystemError(str(e))
 
     # ---------------------------------------------------------

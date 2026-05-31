@@ -205,7 +205,7 @@ class DataService:
         # ---------------------------------------------------------
         try:
             df = table.to_pandas()
-        except pa.ArrowTypeError:
+        except (pa.ArrowTypeError, pa.ArrowInvalid):
             raise ValidationError("Nested list contains mixed types.")
 
         # ---------------------------------------------------------

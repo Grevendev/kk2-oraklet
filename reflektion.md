@@ -193,30 +193,32 @@ Jag ville lämna in något som **jag själv skulle vara stolt över att deploya 
 
 ## Teknisk bilaga – arkitekturdiagram
 ### Systemöversikt
-┌──────────────────────────────────────────────────────────────┐
-│                          FastAPI App                          │
-│                     (Routers, Middleware)                     │
-└───────────────┬──────────────────────────────────────────────┘
-                │
-                ▼
-┌──────────────────────────────────────────────────────────────┐
-│                        Data Ingestion                         │
-│  CSV Validator | Parquet Validator | Schema Drift | Semantics │
-└───────────────┬──────────────────────────────────────────────┘
-                │
-                ▼
-┌──────────────────────────────────────────────────────────────┐
-│                         DataService                           │
-│   Fingerprints | Lineage | Stats Cache | Normalization        │
-└───────────────┬──────────────────────────────────────────────┘
-                │
-                ▼
-┌──────────────────────────────────────────────────────────────┐
-│                        AI Pipeline                            │
-│  PromptBuilder → LLMRunner → ResponseParser → Cache/ETag      │
-│  Circuit Breaker | Retry Policy | Timeout | Fallback          │
-└──────────────────────────────────────────────────────────────┘
+```
 
+┌──────────────────────────────────────────────────────────────┐
+│                          FastAPI App                         │
+│                     (Routers, Middleware)                    │
+└───────────────┬──────────────────────────────────────────────┘
+                │
+                ▼
+┌──────────────────────────────────────────────────────────────┐
+│                        Data Ingestion                        │
+│  CSV Validator | Parquet Validator | Schema Drift | Semantics│
+└───────────────┬──────────────────────────────────────────────┘
+                │
+                ▼
+┌──────────────────────────────────────────────────────────────┐
+│                         DataService                          │
+│   Fingerprints | Lineage | Stats Cache | Normalization       │
+└───────────────┬──────────────────────────────────────────────┘
+                │
+                ▼
+┌──────────────────────────────────────────────────────────────┐
+│                        AI Pipeline                           │
+│  PromptBuilder → LLMRunner → ResponseParser → Cache/ETag     │
+│  Circuit Breaker | Retry Policy | Timeout | Fallback         │
+└──────────────────────────────────────────────────────────────┘
+```
 ---
 
 ## Sammanfattning

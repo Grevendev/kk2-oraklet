@@ -26,7 +26,6 @@ pipeline = None
 
 IS_PYTEST = os.getenv("TESTING") == "1"
 
-
 router = APIRouter(prefix="/ai", tags=["AI"])
 
 if not IS_PYTEST:
@@ -127,18 +126,23 @@ async def ask_ai(request: Request, payload: AskRequest):
         GLOBAL_CIRCUIT_BREAKER.after_failure()
         raise SystemError(str(e))
 
-    if IS_PYTEST:
-        answer = "Detta är ett mockat AI‑svar."
-        reasoning = "Mockad reasoning."
+    # ---------------------------------------------------------
+    # ⭐ Normalisera resultatet (dict eller objekt)
+    # ---------------------------------------------------------
+    if isinstance(result, dict):
+        answer = result.get("answer")
+        reasoning = result.get("reasoning")
+        stats_used = result.get("stats_used")
     else:
         answer = result.answer
         reasoning = result.reasoning
+        stats_used = result.stats_used
 
     result_dict = {
         "question": payload.question,
         "answer": answer,
         "reasoning": reasoning,
-        "stats_used": result.stats_used,
+        "stats_used": stats_used,
     }
 
     validated = AIResponse(**result_dict)
@@ -226,18 +230,23 @@ async def ask_ai_stream(request: Request, payload: AskRequest):
             yield f"System error: {str(e)}".encode("utf-8")
             return
 
-        if IS_PYTEST:
-            answer = "Detta är ett mockat AI‑svar."
-            reasoning = "Mockad reasoning."
+        # ---------------------------------------------------------
+        # ⭐ Normalisera resultatet
+        # ---------------------------------------------------------
+        if isinstance(result, dict):
+            answer = result.get("answer")
+            reasoning = result.get("reasoning")
+            stats_used = result.get("stats_used")
         else:
             answer = result.answer
             reasoning = result.reasoning
+            stats_used = result.stats_used
 
         result_dict = {
             "question": payload.question,
             "answer": answer,
             "reasoning": reasoning,
-            "stats_used": result.stats_used,
+            "stats_used": stats_used,
         }
 
         validated = AIResponse(**result_dict)

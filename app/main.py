@@ -250,6 +250,55 @@ def rate_limit_handler(request, exc):
 def health_check():
     return {"status": "ok"}
 
+def canonical_dtype(dtype_str: str) -> str:
+    """Map all numeric types to canonical forms."""
+    if dtype_str.startswith("int"):
+        return "int"
+    if dtype_str.startswith("float"):
+        return "float"
+    if dtype_str == "bool":
+        return "bool"
+    return "string"
+
+def compute_semantic_fp(series):
+    """Compute semantic fingerprint for drift detection."""
+    s = series.dropna()
+
+    if s.empty:
+        return "empty"
+
+    # Numeric distribution fingerprint
+    if str(s.dtype).startswith(("int", "float")):
+        mean = float(s.mean())
+        std = float(s.std()) if len(s) > 1 else 0.0
+        return f"{mean:.4f}|{std:.4f}"
+
+    # Categorical fingerprint (top 50 sorted unique)
+    uniq = sorted(map(str, s.unique()))
+    return "|".join(uniq[:50])
+
+
+import hashlib, json
+
+def compute_schema_fp(df):
+    """Canonical schema fingerprint: sorted columns + canonical dtypes."""
+    cols = sorted(df.columns)
+    dtypes = {col: canonical_dtype(str(df[col].dtype)) for col in cols}
+
+    schema_repr = {"columns": cols, "dtypes": dtypes}
+    raw = json.dumps(schema_repr, sort_keys=True).encode()
+    return hashlib.sha256(raw).hexdigest()
+
+def check_semantic_drift(df, old_fp, blocking: bool):
+    """Compare semantic fingerprints column-by-column."""
+    new_fp = {col: compute_semantic_fp(df[col]) for col in df.columns}
+
+    if blocking and old_fp:
+        for col in df.columns:
+            if col in old_fp and old_fp[col] != new_fp[col]:
+                raise UserError(f"Semantic drift detected in column '{col}'")
+
+    return new_fp
 
 # -----------------------------------
 # UPLOAD ENDPOINT
@@ -312,24 +361,7 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
     # -----------------------------
     # SCHEMA CANONICALIZATION
     # -----------------------------
-    canonical_cols = sorted(df.columns)
-    canonical_dtypes = {
-        col: (
-            "int" if str(df[col].dtype).startswith("int")
-            else "float" if str(df[col].dtype).startswith("float")
-            else "bool" if str(df[col].dtype) == "bool"
-            else "string"
-        )
-        for col in canonical_cols
-    }
-
-    schema_repr = {
-        "columns": canonical_cols,
-        "dtypes": canonical_dtypes
-    }
-
-    import hashlib, json
-    new_schema_fp = hashlib.sha256(json.dumps(schema_repr, sort_keys=True).encode()).hexdigest()
+    new_schema_fp = compute_schema_fp(df)
 
     # -----------------------------
     # SCHEMA DRIFT CHECK
@@ -340,31 +372,13 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
                 raise UserError("Schema drift detected")
 
     # -----------------------------
-    # SEMANTIC FINGERPRINTING
+    # SEMANTIC DRIFT
     # -----------------------------
-    if not hasattr(state, "semantic_fingerprint") or state.semantic_fingerprint is None:
-        state.semantic_fingerprint = {}
-
-    new_semantic_fp = {}
-    for col in df.columns:
-        s = df[col].dropna()
-
-        if s.empty:
-            fp = "empty"
-        elif s.dtype == "float64" or s.dtype == "int64":
-            fp = f"{float(s.mean()):.4f}|{float(s.std()):.4f}"
-        else:
-            fp = "|".join(sorted(map(str, s.unique()))[:50])
-
-        new_semantic_fp[col] = fp
-
-    # SEMANTIC DRIFT CHECK
-    if data_service._df is not None and state.semantic_drift_blocking:
-        for col in df.columns:
-            old = state.semantic_fingerprint.get(col)
-            new = new_semantic_fp[col]
-            if old is not None and old != new:
-                raise UserError(f"Semantic drift detected in column '{col}'")
+    new_semantic_fp = check_semantic_drift(
+        df,
+        state.semantic_fingerprint,
+        state.semantic_drift_blocking
+    )
 
     # -----------------------------
     # SAVE DATASET
@@ -376,11 +390,7 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
     state.semantic_fingerprint = new_semantic_fp
 
     # COLUMN LINEAGE
-    if not hasattr(state, "column_lineage") or state.column_lineage is None:
-        state.column_lineage = {}
-
-    for col in df.columns:
-        state.column_lineage[col] = str(df[col].dtype)
+    state.column_lineage = {col: str(df[col].dtype) for col in df.columns}
 
     clear_ai_cache()
 
@@ -389,6 +399,7 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
         columns=list(df.columns),
         dtypes={col: str(dtype) for col, dtype in df.dtypes.items()}
     )
+
 
 
 

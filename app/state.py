@@ -5,41 +5,39 @@ from app.data import data_service
 
 class GlobalState:
     def __init__(self):
-        # dataset & stats
-        self.stats = None
-        self.dataset = None
-
-        # Parquet schema governance
-        self.schema_fingerprint = None
-        self.column_lineage = {}
-        self.semantic_fingerprint = {}
-
-        # Drift policies
-        self.schema_drift_blocking = True
-        self.semantic_drift_blocking = True
-
-        # AI pipeline / data service
-        self.data_service = data_service
-
-        # Pipeline (sätts vid startup i app/main.py)
-        
+        self.reset()
 
     def reset(self):
         """
         Reset all global ingestion + AI state.
         Testsviten kan anropa detta för att få en ren miljö.
         """
-        self.stats = None
-        self.dataset = None
 
+        # Dataset & stats
+        self.dataset = None
+        self.stats = None
+
+        # Canonical schema fingerprint
+        # (kolumnnamn sorterade + canonical dtypes)
         self.schema_fingerprint = None
-        self.column_lineage = {}
+
+        # Semantic fingerprint per kolumn
+        # { column_name: semantic_fp_string }
         self.semantic_fingerprint = {}
 
+        # Column lineage (dtype historik)
+        # { column_name: dtype_string }
+        self.column_lineage = {}
+
+        # Drift policies
         self.schema_drift_blocking = True
         self.semantic_drift_blocking = True
 
-        # Pipeline lämnas orörd här; test kan sätta om den själva.
+        # Data service (behålls)
+        self.data_service = data_service
+
+        # Pipeline (sätts av main.py)
+        self.pipeline = None
 
 
 state = GlobalState()

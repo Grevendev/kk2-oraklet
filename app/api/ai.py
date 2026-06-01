@@ -132,7 +132,7 @@ async def ask_ai(request: Request, payload: AskRequest):
     if isinstance(result, dict):
         answer = result.get("answer")
         reasoning = result.get("reasoning") or "Mockad reasoning."
-        stats_used = result.get("stats_used") or {}
+        stats_used = result.get("stats_used") or {"ts": datetime.utcnow().isoformat()}
     else:
         answer = result.answer
         reasoning = result.reasoning
@@ -184,7 +184,7 @@ async def ask_ai_stream(request: Request, payload: AskRequest):
     async def streamer() -> AsyncGenerator[bytes, None]:
 
         # ---------------------------------------------------------
-        #  PYTEST: returnera mock‑svaret direkt (krav från testet)
+        # PYTEST: returnera mock‑svaret direkt (krav från testet)
         # ---------------------------------------------------------
         if IS_PYTEST:
             answer = "Detta är ett mockat AI‑svar."
@@ -245,7 +245,7 @@ async def ask_ai_stream(request: Request, payload: AskRequest):
         if isinstance(result, dict):
             answer = result.get("answer")
             reasoning = result.get("reasoning") or "Mockad reasoning."
-            stats_used = result.get("stats_used") or {}
+            stats_used = result.get("stats_used") or {"ts": datetime.utcnow().isoformat()}
         else:
             answer = result.answer
             reasoning = result.reasoning

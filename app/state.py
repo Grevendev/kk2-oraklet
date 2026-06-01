@@ -10,7 +10,7 @@ class GlobalState:
     def reset(self):
         """
         Reset all global ingestion + AI state.
-        Testsviten kan anropa detta för att få en ren miljö.
+        Testsviten anropar detta för att få en ren miljö.
         """
 
         # Dataset & stats
@@ -18,7 +18,7 @@ class GlobalState:
         self.stats = None
 
         # Canonical schema fingerprint
-        # (kolumnnamn sorterade + canonical dtypes)
+        # (sorterade kolumner + canonical dtypes)
         self.schema_fingerprint = None
 
         # Semantic fingerprint per kolumn

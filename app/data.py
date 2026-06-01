@@ -15,7 +15,6 @@ from app.chain.steps import GLOBAL_CIRCUIT_BREAKER
 from app.chain.errors import PipelineError
 
 
-
 # ============================================================
 # DataService
 # ============================================================
@@ -144,7 +143,6 @@ class DataService:
         self._stats_timestamp = datetime.utcnow()
         return stats
 
-
     def get_stats_etag(self) -> str:
         if self._data_fingerprint is None:
             raise ValidationError("No dataset uploaded yet.")
@@ -164,7 +162,7 @@ class DataService:
         return self._parquet_bytes
 
     # ---------------------------------------------------------
-    # PARQUET VALIDATOR (INSIDE CLASS)
+    # PARQUET VALIDATOR (UPDATED)
     # ---------------------------------------------------------
     def validate_and_clean_parquet(self, file_bytes: bytes) -> pd.DataFrame:
         try:
@@ -174,17 +172,23 @@ class DataService:
             if file_bytes[:4] != b"PAR1":
                 raise ValidationError("Invalid Parquet magic bytes.")
 
+            # Read metadata safely
             try:
                 parquet_file = pq.ParquetFile(pa.BufferReader(file_bytes))
             except (pa.ArrowInvalid, pa.ArrowTypeError) as e:
                 raise ValidationError("Invalid Parquet data: " + str(e))
 
             schema = parquet_file.schema_arrow
-
             names = schema.names
+
+            # Column name validation BEFORE reading table
+            if any(n is None or str(n).strip() == "" for n in names):
+                raise ValidationError("Empty or null column name.")
+
             if len(names) != len(set(names)):
                 raise ValidationError("Duplicate columns detected.")
 
+            # Read table
             try:
                 table = parquet_file.read()
             except pa.ArrowTypeError:
@@ -192,6 +196,7 @@ class DataService:
             except pa.ArrowInvalid as e:
                 raise ValidationError("Invalid Parquet data: " + str(e))
 
+            # Mixed int/float detection BEFORE pandas
             for col_idx in range(table.num_columns):
                 column = table.column(col_idx)
 
@@ -209,11 +214,13 @@ class DataService:
                     if seen_int and seen_float:
                         raise ValidationError("Mixed int and float values.")
 
+            # Convert to pandas
             try:
                 df = table.to_pandas()
             except (pa.ArrowTypeError, pa.ArrowInvalid):
                 raise ValidationError("Nested list contains mixed types.")
 
+            # Mixed int/float AFTER pandas
             for col in df.columns:
                 s = df[col]
 
@@ -226,6 +233,7 @@ class DataService:
                     if is_int_like.any() and (~is_int_like).any():
                         raise ValidationError("Mixed int and float values.")
 
+            # Column cleanup + normalization
             cleaned = []
             for col in df.columns:
                 if col is None or str(col).strip() == "":
@@ -234,6 +242,7 @@ class DataService:
             df.columns = cleaned
             df.columns = [self._normalize(col) for col in df.columns]
 
+            # Nested list inconsistent types
             for col in df.columns:
                 s = df[col]
                 if s.apply(lambda x: isinstance(x, list)).any():
@@ -245,18 +254,21 @@ class DataService:
                     if len(types) > 1:
                         raise ValidationError("Nested list contains mixed types.")
 
+            # Mixed numeric + string
             for col in df.columns:
                 s = df[col]
                 if s.apply(lambda x: isinstance(x, (int, float))).any() and \
                    s.apply(lambda x: isinstance(x, str)).any():
                     raise ValidationError("Mixed numeric and string values.")
 
+            # Bool + int → promote to int
             for col in df.columns:
                 s = df[col]
                 if s.apply(lambda x: isinstance(x, bool)).any() and \
                    s.apply(lambda x: isinstance(x, int)).any():
                     df[col] = s.astype(int)
 
+            # Nullability check
             for col in df.columns:
                 if df[col].isna().all():
                     raise ValidationError(f"Column '{col}' contains only null values.")
@@ -264,9 +276,9 @@ class DataService:
             return df
 
         except ValidationError as e:
-            # ⭐ ENDA ändringen här
             GLOBAL_CIRCUIT_BREAKER.after_failure()
             raise
+
 
 # ============================================================
 # CSV VALIDATOR (TOP LEVEL)
@@ -431,7 +443,6 @@ def validate_and_clean_csv(file_bytes: bytes) -> pd.DataFrame:
         return df
 
     except ValidationError as e:
-        # ⭐ ENDA ändringen här
         GLOBAL_CIRCUIT_BREAKER.after_failure()
         raise
 

@@ -162,7 +162,7 @@ class DataService:
         return self._parquet_bytes
 
     # ---------------------------------------------------------
-    # PARQUET VALIDATOR (UPDATED)
+    # PARQUET VALIDATOR WITH LOGGING
     # ---------------------------------------------------------
     def validate_and_clean_parquet(self, file_bytes: bytes) -> pd.DataFrame:
         try:
@@ -172,29 +172,24 @@ class DataService:
             if file_bytes[:4] != b"PAR1":
                 raise ValidationError("Invalid Parquet magic bytes.")
 
-            # Read metadata safely
-            try:
-                parquet_file = pq.ParquetFile(pa.BufferReader(file_bytes))
-            except (pa.ArrowInvalid, pa.ArrowTypeError) as e:
-                raise ValidationError("Invalid Parquet data: " + str(e))
+            # LOGGING 1 — ParquetFile()
+            logger.error("DEBUG: entering ParquetFile()")
+            parquet_file = pq.ParquetFile(pa.BufferReader(file_bytes))
+            logger.error("DEBUG: ParquetFile() OK")
 
             schema = parquet_file.schema_arrow
             names = schema.names
 
-            # Column name validation BEFORE reading table
             if any(n is None or str(n).strip() == "" for n in names):
                 raise ValidationError("Empty or null column name.")
 
             if len(names) != len(set(names)):
                 raise ValidationError("Duplicate columns detected.")
 
-            # Read table
-            try:
-                table = parquet_file.read()
-            except pa.ArrowTypeError:
-                raise ValidationError("Nested list contains mixed types.")
-            except pa.ArrowInvalid as e:
-                raise ValidationError("Invalid Parquet data: " + str(e))
+            # LOGGING 2 — read()
+            logger.error("DEBUG: entering parquet_file.read()")
+            table = parquet_file.read()
+            logger.error("DEBUG: read() OK")
 
             # Mixed int/float detection BEFORE pandas
             for col_idx in range(table.num_columns):
@@ -214,11 +209,10 @@ class DataService:
                     if seen_int and seen_float:
                         raise ValidationError("Mixed int and float values.")
 
-            # Convert to pandas
-            try:
-                df = table.to_pandas()
-            except (pa.ArrowTypeError, pa.ArrowInvalid):
-                raise ValidationError("Nested list contains mixed types.")
+            # LOGGING 3 — to_pandas()
+            logger.error("DEBUG: entering table.to_pandas()")
+            df = table.to_pandas()
+            logger.error("DEBUG: to_pandas() OK")
 
             # Mixed int/float AFTER pandas
             for col in df.columns:
@@ -281,7 +275,7 @@ class DataService:
 
 
 # ============================================================
-# CSV VALIDATOR (TOP LEVEL)
+# CSV VALIDATOR (unchanged)
 # ============================================================
 def validate_and_clean_csv(file_bytes: bytes) -> pd.DataFrame:
     try:

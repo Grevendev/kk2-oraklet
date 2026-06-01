@@ -257,7 +257,6 @@ def health_check():
 @app.post("/data/upload", response_model=UploadResponse)
 @limiter.limit("5/minute")
 async def upload_data(request: Request, file: UploadFile = File(...)):
-    
     filename = file.filename.lower()
     content_type = (file.content_type or "").lower()
 
@@ -278,12 +277,14 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
 
     file_bytes = await file.read()
 
+    # -----------------------------
+    # VALIDATION
+    # -----------------------------
     try:
         if is_csv:
             df = await run_in_threadpool(validate_and_clean_csv, file_bytes)
         else:
             df = await run_in_threadpool(data_service.validate_and_clean_parquet, file_bytes)
-
     except ValidationError:
         record_validation_failure()
         raise
@@ -292,25 +293,94 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
     except Exception:
         raise SystemError("Unexpected internal error")
 
+    # Normalize columns
     df.columns = [data_service._normalize(col) for col in df.columns]
 
+    # -----------------------------
+    # DUPLICATE COLUMN CHECK
+    # -----------------------------
+    if len(df.columns) != len(set(df.columns)):
+        raise ValidationError("Duplicate columns detected.")
+
+    # -----------------------------
+    # NULL / EMPTY COLUMN NAME CHECK
+    # -----------------------------
+    for col in df.columns:
+        if col is None or str(col).strip() == "":
+            raise ValidationError("Empty or null column name.")
+
+    # -----------------------------
+    # SCHEMA CANONICALIZATION
+    # -----------------------------
+    canonical_cols = sorted(df.columns)
+    canonical_dtypes = {
+        col: (
+            "int" if str(df[col].dtype).startswith("int")
+            else "float" if str(df[col].dtype).startswith("float")
+            else "bool" if str(df[col].dtype) == "bool"
+            else "string"
+        )
+        for col in canonical_cols
+    }
+
+    schema_repr = {
+        "columns": canonical_cols,
+        "dtypes": canonical_dtypes
+    }
+
+    import hashlib, json
+    new_schema_fp = hashlib.sha256(json.dumps(schema_repr, sort_keys=True).encode()).hexdigest()
+
+    # -----------------------------
+    # SCHEMA DRIFT CHECK
+    # -----------------------------
     if data_service._df is not None:
-        if data_service.is_schema_changed(df):
+        if new_schema_fp != state.schema_fingerprint:
             if state.schema_drift_blocking:
                 raise UserError("Schema drift detected")
 
+    # -----------------------------
+    # SEMANTIC FINGERPRINTING
+    # -----------------------------
+    if not hasattr(state, "semantic_fingerprint") or state.semantic_fingerprint is None:
+        state.semantic_fingerprint = {}
+
+    new_semantic_fp = {}
+    for col in df.columns:
+        s = df[col].dropna()
+
+        if s.empty:
+            fp = "empty"
+        elif s.dtype == "float64" or s.dtype == "int64":
+            fp = f"{float(s.mean()):.4f}|{float(s.std()):.4f}"
+        else:
+            fp = "|".join(sorted(map(str, s.unique()))[:50])
+
+        new_semantic_fp[col] = fp
+
+    # SEMANTIC DRIFT CHECK
+    if data_service._df is not None and state.semantic_drift_blocking:
+        for col in df.columns:
+            old = state.semantic_fingerprint.get(col)
+            new = new_semantic_fp[col]
+            if old is not None and old != new:
+                raise UserError(f"Semantic drift detected in column '{col}'")
+
+    # -----------------------------
+    # SAVE DATASET
+    # -----------------------------
     data_service.set_dataset(df)
     state.dataset = df
     state.stats = data_service.get_stats()
-    state.schema_fingerprint = data_service._schema_fingerprint
+    state.schema_fingerprint = new_schema_fp
+    state.semantic_fingerprint = new_semantic_fp
 
+    # COLUMN LINEAGE
     if not hasattr(state, "column_lineage") or state.column_lineage is None:
         state.column_lineage = {}
 
     for col in df.columns:
-        normalized = data_service._normalize(col)
-        dtype = str(df[col].dtype)
-        state.column_lineage[normalized] = dtype
+        state.column_lineage[col] = str(df[col].dtype)
 
     clear_ai_cache()
 
@@ -319,6 +389,7 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
         columns=list(df.columns),
         dtypes={col: str(dtype) for col, dtype in df.dtypes.items()}
     )
+
 
 
 # -----------------------------------

@@ -24,7 +24,8 @@ from datetime import datetime, timedelta
 
 pipeline = None
 
-IS_PYTEST = "PYTEST_CURRENT_TEST" in os.environ
+IS_PYTEST = os.getenv("TESTING") == "1"
+
 
 router = APIRouter(prefix="/ai", tags=["AI"])
 

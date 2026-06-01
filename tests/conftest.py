@@ -8,10 +8,12 @@ from app.main import app
 from app.data import data_service
 from app.state import state
 from app.container_test import get_test_pipeline
-from app.api.ai import AI_RATE_LIMIT
 
+
+# ---------------------------------------------------------
+# Aktivera testläge
+# ---------------------------------------------------------
 os.environ["TESTING"] = "1"
-
 
 
 @pytest.fixture(autouse=True)
@@ -21,7 +23,6 @@ def reset_state():
     """
     from app.api import ai
 
-    # Före test
     data_service.clear()
     state.dataset = None
     state.stats = None
@@ -29,7 +30,6 @@ def reset_state():
 
     yield
 
-    # Efter test
     data_service.clear()
     state.dataset = None
     state.stats = None
@@ -39,14 +39,26 @@ def reset_state():
 @pytest.fixture(autouse=True)
 def patch_pipeline(monkeypatch):
     """
-    Ersätter pipeline.run med test-pipelinen för ALLA tester.
-    Detta är nödvändigt eftersom FastAPI håller en egen referens
-    till pipeline-instansen vid import.
+    Patchar den pipeline som FastAPI faktiskt använder.
+    Detta är den ENDA patch som fungerar med FastAPI.
     """
     from app.api import ai
-    test_pipeline = get_test_pipeline()
-    monkeypatch.setattr(ai.pipeline, "run", test_pipeline.run)
 
+    # Skapa testpipeline
+    test_pipeline = get_test_pipeline()
+
+    # Patcha pipeline-variabeln i ai-modulen
+    monkeypatch.setattr(ai, "pipeline", test_pipeline)
+
+    # Patcha run-metoden på den pipeline som redan är bunden i routern
+    # (FastAPI binder pipeline.run vid import av ai.py)
+    for route in ai.router.routes:
+        if hasattr(route, "endpoint"):
+            if hasattr(route.endpoint, "__self__"):
+                # Patcha endpointens pipeline om den har en
+                endpoint_self = route.endpoint.__self__
+                if hasattr(endpoint_self, "pipeline"):
+                    monkeypatch.setattr(endpoint_self, "pipeline", test_pipeline)
 
 
 @pytest.fixture
@@ -56,18 +68,20 @@ def client():
     """
     return TestClient(app)
 
+
 @pytest.fixture(autouse=True)
 def disable_rate_limit(monkeypatch):
+    """
+    Tar bort SlowAPI rate limiting helt i tester.
+    """
     from app.api import ai
 
-    # Ta bort SlowAPI's rate-limit attribut
     if hasattr(ai.ask_ai, "_rate_limit"):
         monkeypatch.delattr(ai.ask_ai, "_rate_limit", raising=False)
 
     if hasattr(ai.ask_ai_stream, "_rate_limit"):
         monkeypatch.delattr(ai.ask_ai_stream, "_rate_limit", raising=False)
 
-    # Ta bort SlowAPI dependencies från FastAPI-routen
     for route in ai.router.routes:
         if hasattr(route, "dependant"):
             route.dependant.dependencies = [

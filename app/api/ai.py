@@ -22,7 +22,7 @@ from app.chain.steps import PromptBuilderInput, GLOBAL_CIRCUIT_BREAKER
 from app.chain.pipeline import OrakletPipeline
 from datetime import datetime, timedelta
 
-pipeline = OrakletPipeline()
+pipeline = None
 
 IS_PYTEST = "PYTEST_CURRENT_TEST" in os.environ
 

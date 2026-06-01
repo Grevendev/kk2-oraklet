@@ -22,7 +22,7 @@ class GlobalState:
         self.data_service = data_service
 
         # Pipeline (sätts vid startup i app/main.py)
-        self.pipeline = None
+        
 
     def reset(self):
         """

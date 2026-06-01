@@ -104,9 +104,9 @@ def record_validation_failure():
 @app.on_event("startup")
 async def on_startup():
     logger.info({"event": "server_startup"})
-    # ⭐ ENDA ändringen: skapa INTE pipeline i testläge
-    if not TESTING:
-        state.pipeline = OrakletPipeline()
+    # Pipeline skapas inte här längre
+    pass
+
 
 
 @app.on_event("shutdown")

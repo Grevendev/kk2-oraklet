@@ -24,7 +24,7 @@ Oraklet is a production-grade backend system built on top of FastAPI, designed t
 The system is engineered for reliability, observability, and extensibility, following real-world backend architecture patterns.
 
 ---
-
+```
 ## High-Leve Architecture
                           ┌────────────────────────────┐
                           │        FastAPI App         │
@@ -64,18 +64,18 @@ The system is engineered for reliability, observability, and extensibility, foll
               └──────────────────────┬─────────────────────────────┘
                                      │
                                      ▼
-         ┌───────────────────────────────────────────────────────┐                                                        |
-         │                     AI Pipelin (Runnable)                                              │
-         │   PromptBuilder → LLMRunner → ResponseParser                                         │
-         │
-         │   - Typed Pydantic models                                  │
-         │   - Circu it    breaker                                        │
-         │   - Retry policy (exponential backoff + jitter)            │
-         │   - Timeout protection                                     
-         │   - Fallback strategy                                                │
-         │   - Structured logging + metrics                                                  │
-         └────────────────────────────────────────────────────────────┘
-
+         ┌───────────────────────────────────────────────────────┐                                                     
+         │                     AI Pipelin (Runnable)             │
+         │   PromptBuilder → LLMRunner → ResponseParser          │
+         │                                                       |
+         │   - Typed Pydantic models                             │
+         │   - Circu it    breaker                               │
+         │   - Retry policy (exponential backoff + jitter)       │
+         │   - Timeout protection                                |    
+         │   - Fallback strategy                                 │
+         │   - Structured logging + metrics                      │
+         └───────────────────────────────────────────────────────┘
+```
 ---
 
 ## **Feature**

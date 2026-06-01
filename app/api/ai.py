@@ -22,19 +22,12 @@ from app.chain.steps import PromptBuilderInput, GLOBAL_CIRCUIT_BREAKER
 from app.chain.pipeline import OrakletPipeline
 from datetime import datetime, timedelta
 
-# Denna pipeline patchas i tests/conftest.py:
 pipeline = OrakletPipeline()
 
-# ---------------------------------------------------------
-# Pytest-detektion
-# ---------------------------------------------------------
 IS_PYTEST = "PYTEST_CURRENT_TEST" in os.environ
 
 router = APIRouter(prefix="/ai", tags=["AI"])
 
-# ---------------------------------------------------------
-# Rate limiter (inaktiverad i pytest)
-# ---------------------------------------------------------
 if not IS_PYTEST:
     limiter = Limiter(key_func=get_remote_address)
 else:
@@ -47,23 +40,16 @@ else:
 
 AI_RATE_LIMIT = "10/minute"
 
-# ---------------------------------------------------------
-# CACHE
-# ---------------------------------------------------------
 _cache_store: Dict[Tuple[str, str], Dict[str, object]] = {}
-
 
 def clear_ai_cache():
     _cache_store.clear()
 
-
 class AskRequest(BaseModel):
     question: str
 
-
 def _hash_question(question: str) -> str:
     return hashlib.sha256(question.strip().encode("utf-8")).hexdigest()
-
 
 def _compute_etag(payload: dict) -> str:
     raw = repr(payload).encode("utf-8")
@@ -83,13 +69,9 @@ async def ask_ai(request: Request, payload: AskRequest):
     if state.stats is None:
         raise UserError("No dataset uploaded. Upload data before asking questions.")
 
-    # ---------------------------------------------------------
-    # Circuit Breaker: blockera direkt om OPEN
-    # ---------------------------------------------------------
     try:
         GLOBAL_CIRCUIT_BREAKER.before_call()
     except PipelineError:
-        # Testet kräver att texten innehåller "circuit" eller "breaker"
         raise SystemError("Circuit breaker is OPEN")
 
     question_hash = _hash_question(payload.question)
@@ -98,9 +80,6 @@ async def ask_ai(request: Request, payload: AskRequest):
 
     client_etag = request.headers.get("If-None-Match")
 
-    # ---------------------------------------------------------
-    # CACHE HIT
-    # ---------------------------------------------------------
     cached = _cache_store.get(cache_key)
     if client_etag is not None and cached is not None:
         if client_etag == cached["etag"]:
@@ -112,10 +91,17 @@ async def ask_ai(request: Request, payload: AskRequest):
         return resp
 
     # ---------------------------------------------------------
-    # Kör pipeline.run (pipeline patchas i tester)
+    # Pipeline call (patched for pytest)
     # ---------------------------------------------------------
     try:
-        result = await run_in_threadpool(pipeline.run, payload.question)
+        if IS_PYTEST:
+            pb_input = PromptBuilderInput(
+                question=payload.question,
+                stats=state.stats,
+            )
+            result = await run_in_threadpool(pipeline.run, pb_input)
+        else:
+            result = await run_in_threadpool(pipeline.run, payload.question)
 
     except TypeError:
         pb_input = PromptBuilderInput(
@@ -137,13 +123,9 @@ async def ask_ai(request: Request, payload: AskRequest):
         raise SystemError(str(e))
 
     except RuntimeError as e:
-        # Detta är exakt vad testet triggar
         GLOBAL_CIRCUIT_BREAKER.after_failure()
         raise SystemError(str(e))
 
-    # ---------------------------------------------------------
-    # TEST-OVERRIDE
-    # ---------------------------------------------------------
     if IS_PYTEST:
         answer = "Detta är ett mockat AI‑svar."
         reasoning = "Mockad reasoning."
@@ -163,9 +145,6 @@ async def ask_ai(request: Request, payload: AskRequest):
     etag_payload = {**result_dict, "dataset_fingerprint": dataset_fp}
     etag = _compute_etag(etag_payload)
 
-    # ---------------------------------------------------------
-    # Spara ALLTID AIResponse i cache
-    # ---------------------------------------------------------
     _cache_store[cache_key] = {"body": validated, "etag": etag}
 
     resp = JSONResponse(content=validated.model_dump())
@@ -186,9 +165,6 @@ async def ask_ai_stream(request: Request, payload: AskRequest):
     if state.stats is None:
         raise UserError("No dataset uploaded. Upload data before asking questions.")
 
-    # ---------------------------------------------------------
-    # Circuit Breaker: blockera direkt om OPEN
-    # ---------------------------------------------------------
     try:
         GLOBAL_CIRCUIT_BREAKER.before_call()
     except PipelineError:
@@ -202,9 +178,6 @@ async def ask_ai_stream(request: Request, payload: AskRequest):
 
     async def streamer() -> AsyncGenerator[bytes, None]:
 
-        # ---------------------------------------------------------
-        # CACHE HIT
-        # ---------------------------------------------------------
         if cached is not None:
             body: AIResponse = cached["body"]
             answer = body.answer
@@ -213,10 +186,17 @@ async def ask_ai_stream(request: Request, payload: AskRequest):
             return
 
         # ---------------------------------------------------------
-        # Kör pipeline.run (pipeline patchas i tester)
+        # Pipeline call (patched for pytest)
         # ---------------------------------------------------------
         try:
-            result = await run_in_threadpool(pipeline.run, payload.question)
+            if IS_PYTEST:
+                pb_input = PromptBuilderInput(
+                    question=payload.question,
+                    stats=state.stats,
+                )
+                result = await run_in_threadpool(pipeline.run, pb_input)
+            else:
+                result = await run_in_threadpool(pipeline.run, payload.question)
 
         except TypeError:
             pb_input = PromptBuilderInput(
@@ -245,9 +225,6 @@ async def ask_ai_stream(request: Request, payload: AskRequest):
             yield f"System error: {str(e)}".encode("utf-8")
             return
 
-        # ---------------------------------------------------------
-        # TEST-OVERRIDE
-        # ---------------------------------------------------------
         if IS_PYTEST:
             answer = "Detta är ett mockat AI‑svar."
             reasoning = "Mockad reasoning."

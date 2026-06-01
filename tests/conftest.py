@@ -39,10 +39,14 @@ def reset_state():
 @pytest.fixture(autouse=True)
 def patch_pipeline(monkeypatch):
     """
-    Ersätter produktions-pipelinen med TestPipeline för ALLA tester.
+    Ersätter pipeline.run med test-pipelinen för ALLA tester.
+    Detta är nödvändigt eftersom FastAPI håller en egen referens
+    till pipeline-instansen vid import.
     """
     from app.api import ai
-    monkeypatch.setattr(ai, "pipeline", get_test_pipeline())
+    test_pipeline = get_test_pipeline()
+    monkeypatch.setattr(ai.pipeline, "run", test_pipeline.run)
+
 
 
 @pytest.fixture

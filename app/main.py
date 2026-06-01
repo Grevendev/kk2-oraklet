@@ -104,7 +104,8 @@ def record_validation_failure():
 @app.on_event("startup")
 async def on_startup():
     logger.info({"event": "server_startup"})
-    state.pipeline = OrakletPipeline()
+    if not TESTING:
+        state.pipeline = OrakletPipeline()
 
 
 @app.on_event("shutdown")

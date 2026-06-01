@@ -250,55 +250,9 @@ def rate_limit_handler(request, exc):
 def health_check():
     return {"status": "ok"}
 
-def canonical_dtype(dtype_str: str) -> str:
-    """Map all numeric types to canonical forms."""
-    if dtype_str.startswith("int"):
-        return "int"
-    if dtype_str.startswith("float"):
-        return "float"
-    if dtype_str == "bool":
-        return "bool"
-    return "string"
-
-def compute_semantic_fp(series):
-    """Compute semantic fingerprint for drift detection."""
-    s = series.dropna()
-
-    if s.empty:
-        return "empty"
-
-    # Numeric distribution fingerprint
-    if str(s.dtype).startswith(("int", "float")):
-        mean = float(s.mean())
-        std = float(s.std()) if len(s) > 1 else 0.0
-        return f"{mean:.4f}|{std:.4f}"
-
-    # Categorical fingerprint (top 50 sorted unique)
-    uniq = sorted(map(str, s.unique()))
-    return "|".join(uniq[:50])
 
 
-import hashlib, json
 
-def compute_schema_fp(df):
-    """Canonical schema fingerprint: sorted columns + canonical dtypes."""
-    cols = sorted(df.columns)
-    dtypes = {col: canonical_dtype(str(df[col].dtype)) for col in cols}
-
-    schema_repr = {"columns": cols, "dtypes": dtypes}
-    raw = json.dumps(schema_repr, sort_keys=True).encode()
-    return hashlib.sha256(raw).hexdigest()
-
-def check_semantic_drift(df, old_fp, blocking: bool):
-    """Compare semantic fingerprints column-by-column."""
-    new_fp = {col: compute_semantic_fp(df[col]) for col in df.columns}
-
-    if blocking and old_fp:
-        for col in df.columns:
-            if col in old_fp and old_fp[col] != new_fp[col]:
-                raise UserError(f"Semantic drift detected in column '{col}'")
-
-    return new_fp
 
 # -----------------------------------
 # UPLOAD ENDPOINT
@@ -326,9 +280,6 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
 
     file_bytes = await file.read()
 
-    # -----------------------------
-    # VALIDATION
-    # -----------------------------
     try:
         if is_csv:
             df = await run_in_threadpool(validate_and_clean_csv, file_bytes)
@@ -342,55 +293,29 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
     except Exception:
         raise SystemError("Unexpected internal error")
 
-    # Normalize columns
+    # Normalisera kolumnnamn
     df.columns = [data_service._normalize(col) for col in df.columns]
 
-    # -----------------------------
-    # DUPLICATE COLUMN CHECK
-    # -----------------------------
-    if len(df.columns) != len(set(df.columns)):
-        raise ValidationError("Duplicate columns detected.")
-
-    # -----------------------------
-    # NULL / EMPTY COLUMN NAME CHECK
-    # -----------------------------
-    for col in df.columns:
-        if col is None or str(col).strip() == "":
-            raise ValidationError("Empty or null column name.")
-
-    # -----------------------------
-    # SCHEMA CANONICALIZATION
-    # -----------------------------
-    new_schema_fp = compute_schema_fp(df)
-
-    # -----------------------------
-    # SCHEMA DRIFT CHECK
-    # -----------------------------
+    # Enkel schema‑drift: använd DataService:s fingerprint
     if data_service._df is not None:
-        if new_schema_fp != state.schema_fingerprint:
+        if data_service.is_schema_changed(df):
             if state.schema_drift_blocking:
                 raise UserError("Schema drift detected")
 
-    # -----------------------------
-    # SEMANTIC DRIFT
-    # -----------------------------
-    new_semantic_fp = check_semantic_drift(
-        df,
-        state.semantic_fingerprint,
-        state.semantic_drift_blocking
-    )
-
-    # -----------------------------
-    # SAVE DATASET
-    # -----------------------------
+    # Spara dataset via DataService
     data_service.set_dataset(df)
     state.dataset = df
     state.stats = data_service.get_stats()
-    state.schema_fingerprint = new_schema_fp
-    state.semantic_fingerprint = new_semantic_fp
+    state.schema_fingerprint = data_service._schema_fingerprint
 
-    # COLUMN LINEAGE
-    state.column_lineage = {col: str(df[col].dtype) for col in df.columns}
+    # Column lineage (enkel: nuvarande dtype per kolumn)
+    if not hasattr(state, "column_lineage") or state.column_lineage is None:
+        state.column_lineage = {}
+
+    for col in df.columns:
+        normalized = data_service._normalize(col)
+        dtype = str(df[col].dtype)
+        state.column_lineage[normalized] = dtype
 
     clear_ai_cache()
 
@@ -399,6 +324,7 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
         columns=list(df.columns),
         dtypes={col: str(dtype) for col, dtype in df.dtypes.items()}
     )
+
 
 
 

@@ -7,7 +7,7 @@ from typing import List, Dict, Any, Optional
 class UploadResponse(BaseModel):
     """
     Response model for dataset upload metadata.
-    Matches testsvitens krav exakt.
+    Matchar testsvitens krav exakt.
     """
     rows: int
     columns: List[str]

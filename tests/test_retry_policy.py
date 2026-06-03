@@ -7,6 +7,7 @@ from unittest.mock import MagicMock
 from app.main import app
 from app.chain.steps import LLMRunner
 from app.chain.orchestrator import PipelineOrchestrator
+from app.container_test import get_retry_test_pipeline   # <-- NY IMPORT
 
 
 client = TestClient(app)
@@ -17,6 +18,12 @@ def test_retry_policy_multiple_attempts(monkeypatch):
     Verifierar att retry-policy kör flera försök innan den lyckas.
     Försök 1-2 misslyckas → försök 3 lyckas → pipeline returnerar 200.
     """
+
+    # ---------------------------------------------------------
+    # Patcha pipeline till en som använder riktiga LLMRunner
+    # ---------------------------------------------------------
+    from app.api import ai
+    monkeypatch.setattr(ai, "pipeline", get_retry_test_pipeline())
 
     # ---------------------------------------------------------
     # 1. Mocka LLMRunner._run_model_async så att:

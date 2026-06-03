@@ -29,3 +29,15 @@ def get_test_pipeline():
         FakeLLMRunner(),
         ResponseParser(),
     ])
+
+def get_retry_test_pipeline():
+    """
+    Pipeline som använder riktiga LLMRunner för retry-policy tester.
+    """
+    from app.chain.steps import LLMRunner
+    return PipelineOrchestrator([
+        PromptBuilder(),
+        LLMRunner(),
+        ResponseParser(),
+    ])
+

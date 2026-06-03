@@ -1,5 +1,5 @@
 # app/chain/steps.py
-
+import anyio
 from typing import Dict, Any
 from pydantic import BaseModel
 import threading
@@ -119,9 +119,12 @@ class LLMRunner(PipelineStep[PromptBuilderOutput, LLMRunnerOutput]):
         return cls._pipeline
 
     async def _run_model_async(self, prompt: str):
+        """
+        Kör LLM-samtalet i en worker-tråd via AnyIO, med timeout.
+        """
         generator = self._get_pipeline()
 
-        def run_model_sync():
+        def run_sync():
             return generator(
                 prompt,
                 max_new_tokens=200,
@@ -129,12 +132,19 @@ class LLMRunner(PipelineStep[PromptBuilderOutput, LLMRunnerOutput]):
                 do_sample=False
             )
 
-        return await run_with_timeout(
-            lambda: run_model_sync(),
-            timeout=LLM_TIMEOUT_SECONDS
-        )
+        # Timeout hanteras via AnyIO
+        with anyio.move_on_after(LLM_TIMEOUT_SECONDS) as scope:
+            result = await anyio.to_thread.run_sync(run_sync)
+
+        if scope.cancel_called:
+            raise TimeoutError("LLM timed out")
+
+        return result
 
     async def _run_fallback_async(self, prompt: str):
+        """
+        Fallback-svar om modellen inte kan köras.
+        """
         return {
             "generated_text": f"{prompt}\n\nAnswer: Detta är ett fallback‑svar."
         }
@@ -142,24 +152,32 @@ class LLMRunner(PipelineStep[PromptBuilderOutput, LLMRunnerOutput]):
     def _sleep(self, seconds: float):
         time.sleep(seconds)
 
+    def _normalize_output(self, result: Any) -> Any:
+        """
+        Normaliserar output från modellen till samma format som tidigare.
+        """
+        if isinstance(result, dict):
+            return result
+        return result[0]["generated_text"]
+
     def invoke(self, input: PromptBuilderOutput) -> LLMRunnerOutput:
         logger.info("LLMRunner invoked")
 
+        # Circuit breaker check innan vi försöker
         self.circuit.before_call()
 
         for attempt in range(self.retry.max_attempts):
             try:
-                result = asyncio.run(self._run_model_async(input.prompt))
+                # Kör async-funktionen från sync-kod via AnyIO
+                result = anyio.from_thread.run(self._run_model_async, input.prompt)
+                raw_text = self._normalize_output(result)
 
-                if isinstance(result, dict):
-                    raw_text = result
-                else:
-                    raw_text = result[0]["generated_text"]
-
+                # Lyckat anrop → nollställ CB
                 self.circuit.after_success()
                 return LLMRunnerOutput(raw_output=raw_text)
 
             except Exception as exc:
+                # Om vi har fler försök kvar → backoff + retry
                 if attempt < self.retry.max_attempts - 1:
                     delay = self.retry.get_delay(attempt)
                     logger.warning({
@@ -171,11 +189,14 @@ class LLMRunner(PipelineStep[PromptBuilderOutput, LLMRunnerOutput]):
                     self._sleep(delay)
                     continue
 
+                # Sista försöket misslyckades → försök fallback
                 try:
-                    fallback = asyncio.run(self._run_fallback_async(input.prompt))
-                    self.circuit.after_failure()
+                    fallback = anyio.from_thread.run(self._run_fallback_async, input.prompt)
+                    # Fallback räknas som kontrollerad success ur CB-perspektiv
+                    self.circuit.after_success()
                     return LLMRunnerOutput(raw_output=fallback)
                 except Exception as fallback_exc:
+                    # Fallback misslyckades också → detta är ett riktigt fel
                     self.circuit.after_failure()
                     raise PipelineError(
                         message="LLM fallback failed",

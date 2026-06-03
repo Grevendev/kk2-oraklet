@@ -5,57 +5,54 @@ from fastapi.testclient import TestClient
 from unittest.mock import MagicMock
 
 from app.main import app
-from app.chain.orchestrator import PipelineOrchestrator
-
 
 client = TestClient(app)
 
 
+@pytest.mark.usefixtures(
+    "reset_circuit_breaker",
+    "reset_state",
+    "disable_rate_limit",
+    "reset_ai_cache",
+)
 def test_circuit_breaker_blocks_when_open(monkeypatch):
     """
-    Verifierar att Circuit Breaker i OPEN state blockerar alla anrop direkt
-    utan att pipeline.run körs.
+    Detta test körs MEDVETET utan patch_pipeline-fixturen.
     """
 
     # ---------------------------------------------------------
-    # 1. Mocka pipeline.run så vi kan se om den körs
+    # 1. Patcha pipeline.run manuellt
     # ---------------------------------------------------------
+    from app.api import ai
     run_spy = MagicMock()
-    monkeypatch.setattr(PipelineOrchestrator, "run", run_spy)
+    monkeypatch.setattr(ai.pipeline, "run", run_spy)
 
     # ---------------------------------------------------------
-    # 2. Hämta CB-instansen från LLMRunner och sätt den till OPEN
+    # 2. Öppna rätt Circuit Breaker
     # ---------------------------------------------------------
-    from app.chain.steps import LLMRunner
-    runner = LLMRunner()
-    cb = runner.circuit
-
+    cb = ai.pipeline.circuit
     cb.state = "OPEN"
     cb.failure_count = cb.max_failures
 
     # ---------------------------------------------------------
-    # 3. Ladda upp dataset (krävs för /ai/ask)
+    # 3. Ladda dataset
     # ---------------------------------------------------------
     csv = "city,temp\nMalmö,10\nLund,12\n"
     files = {"file": ("test.csv", csv, "text/csv")}
-
     upload_res = client.post("/data/upload", files=files)
     assert upload_res.status_code == 200
 
     payload = {"question": "Vad är medeltemperaturen?"}
 
     # ---------------------------------------------------------
-    # 4. Anrop → ska blockeras direkt av CB
+    # 4. Anrop → ska blockeras direkt
     # ---------------------------------------------------------
     res = client.post("/ai/ask", json=payload)
 
-    # Din implementation returnerar 500 (SystemError)
     assert res.status_code == 500
-
-    # Felmeddelandet ska indikera CB-blockering
     assert "circuit" in res.text.lower() or "breaker" in res.text.lower()
 
     # ---------------------------------------------------------
-    # 5. Pipeline får INTE köras när CB är OPEN
+    # 5. Pipeline får INTE köras
     # ---------------------------------------------------------
     run_spy.assert_not_called()

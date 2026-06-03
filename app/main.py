@@ -7,6 +7,9 @@ from collections import deque
 import math
 import sys
 
+from app.chain.steps import GLOBAL_CIRCUIT_BREAKER
+from app.chain.errors import PipelineError
+
 from fastapi import FastAPI, UploadFile, File, HTTPException, Request
 from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.concurrency import run_in_threadpool
@@ -260,13 +263,26 @@ def health_check():
 @app.post("/data/upload", response_model=UploadResponse)
 @limiter.limit("5/minute")
 async def upload_data(request: Request, file: UploadFile = File(...)):
+    # ---------------------------------------------------------
+    # 0. Circuit Breaker: blockera direkt om OPEN
+    # ---------------------------------------------------------
+    try:
+        GLOBAL_CIRCUIT_BREAKER.before_call()
+    except PipelineError as e:
+        # CB är OPEN → returnera 503
+        raise SystemError(str(e))
+
     filename = file.filename.lower()
     content_type = (file.content_type or "").lower()
 
     is_csv = filename.endswith(".csv")
     is_parquet = filename.endswith(".parquet")
 
+    # ---------------------------------------------------------
+    # 1. Filtyp-validering → ticka CB vid fel
+    # ---------------------------------------------------------
     if not (is_csv or is_parquet):
+        GLOBAL_CIRCUIT_BREAKER.after_failure()
         record_validation_failure()
         raise ValidationError("Unsupported file type.")
 
@@ -275,40 +291,59 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
         "application/x-parquet",
         "application/vnd.apache.parquet"
     ]:
+        GLOBAL_CIRCUIT_BREAKER.after_failure()
         record_validation_failure()
         raise ValidationError("Invalid Parquet MIME type.")
 
     file_bytes = await file.read()
 
+    # ---------------------------------------------------------
+    # 2. CSV/Parquet validering → ticka CB vid valideringsfel
+    # ---------------------------------------------------------
     try:
         if is_csv:
             df = await run_in_threadpool(validate_and_clean_csv, file_bytes)
         else:
             df = await run_in_threadpool(data_service.validate_and_clean_parquet, file_bytes)
+
     except ValidationError:
+        GLOBAL_CIRCUIT_BREAKER.after_failure()
         record_validation_failure()
         raise
+
     except UserError:
+        # UserError är inte systemfel → ticka inte CB
         raise
+
     except Exception:
+        # Okänt fel → ticka CB
+        GLOBAL_CIRCUIT_BREAKER.after_failure()
         raise SystemError("Unexpected internal error")
 
-    # Normalisera kolumnnamn
+    # ---------------------------------------------------------
+    # 3. Normalisera kolumnnamn
+    # ---------------------------------------------------------
     df.columns = [data_service._normalize(col) for col in df.columns]
 
-    # Enkel schema‑drift: använd DataService:s fingerprint
+    # ---------------------------------------------------------
+    # 4. Schema drift → UserError (tickar inte CB)
+    # ---------------------------------------------------------
     if data_service._df is not None:
         if data_service.is_schema_changed(df):
             if state.schema_drift_blocking:
                 raise UserError("Schema drift detected")
 
-    # Spara dataset via DataService
+    # ---------------------------------------------------------
+    # 5. Spara dataset
+    # ---------------------------------------------------------
     data_service.set_dataset(df)
     state.dataset = df
     state.stats = data_service.get_stats()
     state.schema_fingerprint = data_service._schema_fingerprint
 
-    # Column lineage (enkel: nuvarande dtype per kolumn)
+    # ---------------------------------------------------------
+    # 6. Column lineage
+    # ---------------------------------------------------------
     if not hasattr(state, "column_lineage") or state.column_lineage is None:
         state.column_lineage = {}
 
@@ -319,14 +354,16 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
 
     clear_ai_cache()
 
+    # ---------------------------------------------------------
+    # 7. SUCCESS → nollställ CB
+    # ---------------------------------------------------------
+    GLOBAL_CIRCUIT_BREAKER.after_success()
+
     return UploadResponse(
         rows=df.shape[0],
         columns=list(df.columns),
         dtypes={col: str(dtype) for col, dtype in df.dtypes.items()}
     )
-
-
-
 
 
 # -----------------------------------

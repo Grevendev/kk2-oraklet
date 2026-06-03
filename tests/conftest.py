@@ -14,6 +14,20 @@ from app.state import state
 from app.container_test import get_test_pipeline
 
 
+from app.chain.steps import GLOBAL_CIRCUIT_BREAKER
+
+@pytest.fixture(autouse=True)
+def reset_circuit_breaker():
+    """
+    Säkerställer att Circuit Breaker alltid startar i CLOSED state
+    och inte läcker state mellan tester.
+    """
+    GLOBAL_CIRCUIT_BREAKER.reset()
+    yield
+    GLOBAL_CIRCUIT_BREAKER.reset()
+
+
+
 @pytest.fixture(autouse=True)
 def reset_state():
     from app.api import ai

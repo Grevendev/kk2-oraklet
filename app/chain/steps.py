@@ -51,7 +51,20 @@ class ResponseParserOutput(BaseModel):
 # Global Circuit Breaker (delas mellan LLMRunner och API)
 # ============================================================
 
-GLOBAL_CIRCUIT_BREAKER = CircuitBreaker()
+class FixedCircuitBreaker(CircuitBreaker):
+    """
+    Utökar din befintliga CircuitBreaker med reset_timeout(),
+    eftersom testerna kräver att den finns.
+    """
+
+    def reset_timeout(self):
+        """
+        Tester använder denna för att simulera att timeouten har gått ut.
+        """
+        self.opened_at = 0.0
+
+
+GLOBAL_CIRCUIT_BREAKER = FixedCircuitBreaker()
 
 
 # ============================================================
@@ -82,7 +95,7 @@ class PromptBuilder(PipelineStep[PromptBuilderInput, PromptBuilderOutput]):
 
 
 # ============================================================
-# Step 2 — LLMRunner
+# Step 2 — LLLRunner
 # ============================================================
 
 class LLMRunner(PipelineStep[PromptBuilderOutput, LLMRunnerOutput]):
@@ -91,7 +104,6 @@ class LLMRunner(PipelineStep[PromptBuilderOutput, LLMRunnerOutput]):
     _pipeline_lock = threading.Lock()
 
     def __init__(self):
-        # Alla LLMRunner delar samma CB
         self.circuit = GLOBAL_CIRCUIT_BREAKER
         self.retry = RetryPolicy()
 
@@ -119,9 +131,6 @@ class LLMRunner(PipelineStep[PromptBuilderOutput, LLMRunnerOutput]):
         return cls._pipeline
 
     async def _run_model_async(self, prompt: str):
-        """
-        Kör LLM-samtalet i en worker-tråd via AnyIO, med timeout.
-        """
         generator = self._get_pipeline()
 
         def run_sync():
@@ -132,7 +141,6 @@ class LLMRunner(PipelineStep[PromptBuilderOutput, LLMRunnerOutput]):
                 do_sample=False
             )
 
-        # Timeout hanteras via AnyIO
         with anyio.move_on_after(LLM_TIMEOUT_SECONDS) as scope:
             result = await anyio.to_thread.run_sync(run_sync)
 
@@ -142,9 +150,6 @@ class LLMRunner(PipelineStep[PromptBuilderOutput, LLMRunnerOutput]):
         return result
 
     async def _run_fallback_async(self, prompt: str):
-        """
-        Fallback-svar om modellen inte kan köras.
-        """
         return {
             "generated_text": f"{prompt}\n\nAnswer: Detta är ett fallback‑svar."
         }
@@ -153,9 +158,6 @@ class LLMRunner(PipelineStep[PromptBuilderOutput, LLMRunnerOutput]):
         time.sleep(seconds)
 
     def _normalize_output(self, result: Any) -> Any:
-        """
-        Normaliserar output från modellen till samma format som tidigare.
-        """
         if isinstance(result, dict):
             return result
         return result[0]["generated_text"]
@@ -163,21 +165,17 @@ class LLMRunner(PipelineStep[PromptBuilderOutput, LLMRunnerOutput]):
     def invoke(self, input: PromptBuilderOutput) -> LLMRunnerOutput:
         logger.info("LLMRunner invoked")
 
-        # Circuit breaker check innan vi försöker
         self.circuit.before_call()
 
         for attempt in range(self.retry.max_attempts):
             try:
-                # Kör async-funktionen från sync-kod via AnyIO
                 result = anyio.from_thread.run(self._run_model_async, input.prompt)
                 raw_text = self._normalize_output(result)
 
-                # Lyckat anrop → nollställ CB
                 self.circuit.after_success()
                 return LLMRunnerOutput(raw_output=raw_text)
 
             except Exception as exc:
-                # Om vi har fler försök kvar → backoff + retry
                 if attempt < self.retry.max_attempts - 1:
                     delay = self.retry.get_delay(attempt)
                     logger.warning({
@@ -189,14 +187,11 @@ class LLMRunner(PipelineStep[PromptBuilderOutput, LLMRunnerOutput]):
                     self._sleep(delay)
                     continue
 
-                # Sista försöket misslyckades → försök fallback
                 try:
                     fallback = anyio.from_thread.run(self._run_fallback_async, input.prompt)
-                    # Fallback räknas som kontrollerad success ur CB-perspektiv
                     self.circuit.after_success()
                     return LLMRunnerOutput(raw_output=fallback)
                 except Exception as fallback_exc:
-                    # Fallback misslyckades också → detta är ett riktigt fel
                     self.circuit.after_failure()
                     raise PipelineError(
                         message="LLM fallback failed",

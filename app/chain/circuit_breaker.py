@@ -69,3 +69,12 @@ class CircuitBreaker:
         self.failures += 1
         if self.failures >= self.failure_threshold:
             self._trip()
+    
+    def reset(self) -> None:
+        """
+        Fully reset the circuit breaker to a clean CLOSED state.
+        Used in test envionments to avoid state leakage between tests.
+        """
+        self.failures = 0
+        self.state = "CLOSED"
+        self.opened_at = 0.0

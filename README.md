@@ -69,7 +69,7 @@ The system is engineered for reliability, observability, and extensibility, foll
          │   PromptBuilder → LLMRunner → ResponseParser          │
          │                                                       |
          │   - Typed Pydantic models                             │
-         │   - Circu it    breaker                               │
+         │   - Circuit    breaker                               │
          │   - Retry policy (exponential backoff + jitter)       │
          │   - Timeout protection                                |    
          │   - Fallback strategy                                 │

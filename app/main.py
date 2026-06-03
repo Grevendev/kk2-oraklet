@@ -245,6 +245,15 @@ def rate_limit_handler(request, exc):
         }
     )
 
+@app.exception_handler(PipelineError)
+async def pipeline_error_handler(request, exc: PipelineError):
+    return JSONResponse(
+        status_code=503,
+        content={
+            "error": exc.message,
+            "step": exc.step_name,
+        }
+    )
 
 # -----------------------------------
 # HEALTH CHECK

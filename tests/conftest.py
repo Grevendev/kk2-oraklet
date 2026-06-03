@@ -7,7 +7,7 @@ os.environ["TESTING"] = "1"
 
 import pytest
 from fastapi.testclient import TestClient
-
+from app.api.ai import clear_ai_cache
 from app.main import app
 from app.data import data_service
 from app.state import state
@@ -79,3 +79,9 @@ def disable_rate_limit(monkeypatch):
                 d for d in route.dependant.dependencies
                 if "slowapi" not in str(d.call)
             ]
+
+@pytest.fixture(autouse=True)
+def reset_ai_cache():
+    clear_ai_cache()
+    yield
+    clear_ai_cache()

@@ -49,8 +49,8 @@ def test_circuit_breaker_blocks_when_open(monkeypatch):
     # ---------------------------------------------------------
     res = client.post("/ai/ask", json=payload)
 
-    # Din implementation returnerar 503 eller 500 beroende på felhantering
-    assert res.status_code in (500, 503)
+    # Din implementation returnerar 500 (SystemError)
+    assert res.status_code == 500
 
     # Felmeddelandet ska indikera CB-blockering
     assert "circuit" in res.text.lower() or "breaker" in res.text.lower()

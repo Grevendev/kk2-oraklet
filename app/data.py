@@ -214,6 +214,7 @@ class DataService:
             df = table.to_pandas()
             logger.error("DEBUG: to_pandas() OK")
 
+            
             # Mixed int/float AFTER pandas
             for col in df.columns:
                 s = df[col]

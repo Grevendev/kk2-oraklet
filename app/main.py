@@ -444,7 +444,18 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
     # Spara/Uppdatera de semantiska fingeravtrycken för alla kolumner
     for col in df.columns:
         normalized_col = unicodedata.normalize("NFC", str(col))
-        state.semantic_fingerprint[normalized_col] = calculate_column_semantic_type(df[col])
+        base_type = calculate_column_semantic_type(df[col])
+        
+        # Berika fingeravtrycket om det är strängar som i själva verket är siffror
+        if str(base_type).lower() == "str":
+            try:
+                import pandas as pd
+                pd.to_numeric(df[col].dropna())
+                state.semantic_fingerprint[normalized_col] = "str:numeric"
+            except (ValueError, TypeError):
+                state.semantic_fingerprint[normalized_col] = "str"
+        else:
+            state.semantic_fingerprint[normalized_col] = base_type
 
     # ---------------------------------------------------------
     # 6. Column lineage

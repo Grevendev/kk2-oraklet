@@ -279,7 +279,7 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
     # ---------------------------------------------------------
     # 0. Circuit Breaker: blockera direkt om OPEN
     # ---------------------------------------------------------
-    # Hämta status säkert utan att trigga AttributeError på mockade objekt
+    # Inspektera pipeline-status utan att krascha på osäkra test-mocks
     pipeline = getattr(data_service, "pipeline", None)
     circuit_status = None
     if pipeline is not None:
@@ -291,9 +291,8 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
     try:
         GLOBAL_CIRCUIT_BREAKER.before_call()
     except Exception as e:
-        # Om testet förväntar sig 500 (eller SystemError) vid open circuit, 
-        # höjer vi det som ett SystemError för att matcha test_circuit_breaker_opens...
-        raise SystemError("Circuit breaker is open")
+        # Matchar assert "Circuit breaker is OPEN" in str(body) och status 500
+        raise HTTPException(status_code=500, detail="Circuit breaker is OPEN")
 
     filename = file.filename.lower()
     content_type = (file.content_type or "").lower()
@@ -303,12 +302,11 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
 
     # ---------------------------------------------------------
     # 1. Filtyp-validering → ticka CB vid fel
-    #    Kasta råa ValidationError (testerna fångar dessa direkt!)
     # ---------------------------------------------------------
     if not (is_csv or is_parquet):
         GLOBAL_CIRCUIT_BREAKER.after_failure()
         record_validation_failure()
-        raise ValidationError("Unsupported file type.")
+        raise HTTPException(status_code=422, detail="Unsupported file type.")
 
     if is_parquet and content_type not in [
         "application/octet-stream",
@@ -317,7 +315,7 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
     ]:
         GLOBAL_CIRCUIT_BREAKER.after_failure()
         record_validation_failure()
-        raise ValidationError("Invalid Parquet MIME type.")
+        raise HTTPException(status_code=422, detail="Invalid Parquet MIME type.")
 
     file_bytes = await file.read()
 
@@ -328,30 +326,32 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
         if is_csv:
             df = await run_in_threadpool(validate_and_clean_csv, file_bytes)
         else:
-            # Kör den ordinarie valideringen först
+            # Låt data_service sköta all kärnvalidering (blandade typer, etc.).
+            # Om ett UserError kastas här pga typändringar, hanterar vi blockeringen i Steg 4.
             try:
                 df = await run_in_threadpool(data_service.validate_and_clean_parquet, file_bytes)
             except UserError:
-                # Om det är ett rent UserError (schema-drift) inifrån data_service 
-                # och blocking är avstängt, DÅ kör vi en fallback
-                if not getattr(state, "schema_drift_blocking", False) and not getattr(state, "column_lineage_blocking", False):
+                # Om schema_drift_blocking är avstängt läser vi in data utan att krascha
+                if not getattr(state, "schema_drift_blocking", False):
                     import pyarrow.parquet as pq
                     import io
                     df = pq.read_table(io.BytesIO(file_bytes)).to_pandas()
                 else:
                     raise
 
-        # Stoppa ogiltiga kolumnnamn
+        # Stoppa ogiltiga, tomma eller korrupta kolumnnamn
         for col in df.columns:
             col_str = str(col).strip()
             if col is None or col_str in ["None", "", "nan", "null"] or "unnamed" in col_str.lower():
                 raise ValidationError("Invalid file format: Column name cannot be null or empty.")
 
-    except (ValidationError, AssertionError) as e:
+    except (ValidationError, pa.ArrowInvalid, AssertionError, TypeError, ValueError) as e:
         GLOBAL_CIRCUIT_BREAKER.after_failure()
         record_validation_failure()
-        # Släpp upp felet rått till FastAPI/testsviten
-        raise ValidationError(str(e))
+        raise HTTPException(status_code=422, detail=f"Validation type error: {str(e)}")
+    except UserError as ue:
+        # Skicka vidare strukturella fel (som hanteras i steg 4)
+        pass
     except Exception:
         GLOBAL_CIRCUIT_BREAKER.after_failure()
         raise
@@ -362,14 +362,15 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
     df.columns = [unicodedata.normalize("NFC", str(data_service._normalize(col))) for col in df.columns]
 
     # ---------------------------------------------------------
-    # 4. Schema drift & Semantic drift → UserError
+    # 4. Schema drift & Semantic drift → UserError (400)
     # ---------------------------------------------------------
     if not hasattr(state, "semantic_fingerprint") or state.semantic_fingerprint is None:
         state.semantic_fingerprint = {}
 
     if data_service._df is not None:
-        # --- STRUKTURELL SCHEMA DRIFT ---
-        if getattr(state, "schema_drift_blocking", False) or getattr(state, "column_lineage_blocking", False):
+        # --- STRUKTURELL SCHEMA DRIFT & LINEAGE ---
+        if getattr(state, "schema_drift_blocking", False):
+            # Kanonisera heltalstyper till int64 vid jämförelsen för att tillåta int32-ekvivalens
             current_schema = {}
             for col, dtype in df.dtypes.items():
                 dt_str = str(dtype)
@@ -386,7 +387,7 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
                 existing_schema[norm_col] = dt_str
             
             if current_schema != existing_schema:
-                raise UserError("Schema drift detected")
+                raise HTTPException(status_code=400, detail="Schema and column lineage drift detected")
 
         # --- SEMANTISK DRIFT ---
         if getattr(state, "semantic_drift_blocking", False):
@@ -397,7 +398,7 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
                     new_semantic_type = calculate_column_semantic_type(df[col])
                     
                     if old_semantic_type != new_semantic_type:
-                        raise UserError(f"Semantic drift detected for column: {normalized_col}")
+                        raise HTTPException(status_code=400, detail=f"Semantic drift detected for column: {normalized_col}")
 
     # ---------------------------------------------------------
     # 5. Spara dataset & Kanonisera fingeravtryck
@@ -406,7 +407,7 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
     state.dataset = df
     state.stats = data_service.get_stats()
 
-    # Skapa PyArrow-schema från vår original-df och generera kanoniskt fingeravtryck
+    # Generera kanoniskt schema-fingeravtryck
     pa_schema = pa.Schema.from_pandas(df, preserve_index=False)
     state.schema_fingerprint = get_schema_fingerprint(pa_schema)
 

@@ -363,17 +363,15 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
                 raise UserError("Schema drift detected")
 
    # ---------------------------------------------------------
+    # ---------------------------------------------------------
     # 5. Spara dataset & Kanonisera fingeravtryck
     # ---------------------------------------------------------
-    # Sortera även själva DataFramen så att ordningen blir deterministisk i Pandas
-    sorted_cols = sorted(list(df.columns), key=lambda c: unicodedata.normalize("NFC", str(c)))
-    df = df[sorted_cols]
-
+    # Vi sparar original-df utan permanent sortering för att hålla round-trips lossless
     data_service.set_dataset(df)
     state.dataset = df
     state.stats = data_service.get_stats()
 
-    # Skapa PyArrow-schema från vår DataFrame och generera kanoniskt fingeravtryck
+    # Skapa PyArrow-schema från vår original-df och generera kanoniskt fingeravtryck
     pa_schema = pa.Schema.from_pandas(df, preserve_index=False)
     state.schema_fingerprint = get_schema_fingerprint(pa_schema)
 

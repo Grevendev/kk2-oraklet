@@ -318,8 +318,8 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
         # Ny Kontroll, stoppa ogiltiga kolumnnamn
         for col in df.columns:
             col_str = str(col).strip()
-            if col is None or col_str == "None" or col_str == "":
-                raise ValidationError("Invalid file format: Column nae cannot be null or empty.")
+            if col is None or col_str in ["None", "", "nan", "null"] or "unnamed" in col_str.lower():
+                raise ValidationError("Invalid file format: Column name cannot be null or empty.")
             
 
 

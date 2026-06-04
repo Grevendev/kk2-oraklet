@@ -326,8 +326,9 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
                 raise ValidationError("Invalid file format: Column name cannot be null or empty.")
             
         # Kanonisering: Sortera kolumerna alfabetiskt efter namn
-        sorted_columns = sorted(list(df.columns), key=lambda c: str(c))
-        df = df[sorted_columns]
+        for col in df.columns:
+            if df[col].dtype in ["int32", "int16", "int8"]:
+                df[col] = df[col].astype("int64")
             
 
 

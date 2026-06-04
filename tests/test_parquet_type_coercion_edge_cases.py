@@ -50,8 +50,15 @@ def test_bool_and_int_mixed():
 
 
 def test_nested_list_inconsistent_types():
-    # Arrow accepterar listor men inte blandade typer i listor
-    list_array = pa.array([[1, 2], ["a", "b"]], type=pa.list_(pa.string()))
+    # PyArrow kräver homogena typer → skriv allt som string
+    list_array = pa.array(
+        [
+            ["1", "2"],      # numeric-like
+            ["a", "b"],      # non-numeric
+        ],
+        type=pa.list_(pa.string())
+    )
+
     table = pa.table({"mixed_list": list_array})
     buf = io.BytesIO()
     pq.write_table(table, buf)
@@ -60,6 +67,7 @@ def test_nested_list_inconsistent_types():
     res = upload_parquet_bytes(buf.read())
     assert res.status_code == 422
     assert "type" in res.text.lower()
+
 
 
 def test_arrowinvalid_on_type_collision(monkeypatch):

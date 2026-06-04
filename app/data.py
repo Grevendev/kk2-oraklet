@@ -240,14 +240,28 @@ class DataService:
             # Nested list inconsistent types
             for col in df.columns:
                 s = df[col]
-                if s.apply(lambda x: isinstance(x, list)).any():
-                    types = set()
+                if s.apply(lambda x: isinstance(x, (list,))).any():
+                    has_numeric_like = False
+                    has_non_numeric = False
+
+                    def is_numeric_like(v):
+                        try:
+                            float(v)
+                            return True
+                        except:
+                            return False
+                    
                     for v in s:
                         if isinstance(v, list):
                             for item in v:
-                                types.add(type(item))
-                    if len(types) > 1:
-                        raise ValidationError("Nested list contains mixed types.")
+                                if is_numeric_like(item):
+                                    has_numeric_like = True
+                                else:
+                                    has_non_numeric = True
+
+                                if has_numeric_like and has_non_numeric:
+                    
+                                    raise ValidationError("Nested list contains mixed types.")
 
             # Mixed numeric + string
             for col in df.columns:

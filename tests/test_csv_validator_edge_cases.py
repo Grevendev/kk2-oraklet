@@ -42,7 +42,7 @@ def test_unknown_columns():
     res = upload("city,temp,unknown_col\nA,10,x\nB,12,y\n")
     assert res.status_code == 200
     # Verifiera att den okända kolumnen faktiskt har processats och finns med i svaret
-    assert "unkown_col" in res.json()["columns"]
+    assert "unknown_col" in res.json()["columns"]
 
 
 def test_too_many_columns():

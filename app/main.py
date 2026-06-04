@@ -355,7 +355,10 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
     # 4. Schema drift → UserError (tickar inte CB)
     # ---------------------------------------------------------
     if data_service._df is not None:
-        if data_service.is_schema_changed(df):
+        # Skapa en temporärt sorterad kopia för schema drift-kontrollen
+        # så att ordningen inte triggar "Schema drift detected"
+        df_sorted_for_drift = df[sorted(list(df.columns), key=lambda c: unicodedata.normalize("NFC", str(c)))]
+        if data_service.is_schema_changed(df_sorted_for_drift):
             if state.schema_drift_blocking:
                 raise UserError("Schema drift detected")
 

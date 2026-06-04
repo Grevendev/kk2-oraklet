@@ -12,7 +12,7 @@ def calculate_column_semantic_type(series: pd.Series) -> str:
 
     dtype_str = str(clean_series.dtype)
     
-    # Om det är en sträng-, kategori- eller generisk objekt-kolumn, inspektera värdena
+    # Inspektera object, string och kategorier på djupet
     if dtype_str == "object" or "string" in dtype_str or "category" in dtype_str:
         def is_numeric_str(val):
             try:

@@ -352,26 +352,36 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
     df.columns = [unicodedata.normalize("NFC", str(data_service._normalize(col))) for col in df.columns]
 
     # ---------------------------------------------------------
-    # 4. Schema drift → UserError (tickar inte CB)
+    # 4. Schema drift & Semantic drift → UserError
     # ---------------------------------------------------------
+    if not hasattr(state, "semantic_fingerprint") or state.semantic_fingerprint is None:
+        state.semantic_fingerprint = {}
+
     if data_service._df is not None:
-        # Skapa en ordningsoberoende ordlista av nuvarande datatyper (alla i NFC)
+        # --- STRUKTURELL SCHEMA DRIFT ---
         current_schema = {col: str(dtype) for col, dtype in df.dtypes.items()}
-        
-        # Skapa motsvarande ordlista från det befintliga datasetet
         existing_schema = {unicodedata.normalize("NFC", str(col)): str(dtype) 
                            for col, dtype in data_service._df.dtypes.items()}
         
-        # Jämför om scheman matchar strukturellt (bortsett från kolumnordning)
         if current_schema != existing_schema:
             if state.schema_drift_blocking:
                 raise UserError("Schema drift detected")
 
-   # ---------------------------------------------------------
+        # --- SEMANTISK DRIFT (Här används den nya funktionen!) ---
+        semantic_blocking = getattr(state, "semantic_drift_blocking", False)
+        
+        for col in df.columns:
+            normalized_col = unicodedata.normalize("NFC", str(col))
+            if normalized_col in state.semantic_fingerprint:
+                old_semantic_type = state.semantic_fingerprint[normalized_col]
+                new_semantic_type = calculate_column_semantic_type(df[col])
+                
+                if old_semantic_type != new_semantic_type and semantic_blocking:
+                    raise UserError(f"Semantic drift detected for column: {normalized_col}")
+
     # ---------------------------------------------------------
     # 5. Spara dataset & Kanonisera fingeravtryck
     # ---------------------------------------------------------
-    # Vi sparar original-df utan permanent sortering för att hålla round-trips lossless
     data_service.set_dataset(df)
     state.dataset = df
     state.stats = data_service.get_stats()
@@ -379,6 +389,13 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
     # Skapa PyArrow-schema från vår original-df och generera kanoniskt fingeravtryck
     pa_schema = pa.Schema.from_pandas(df, preserve_index=False)
     state.schema_fingerprint = get_schema_fingerprint(pa_schema)
+
+    # Spara/Uppdatera de semantiska fingeravtrycken för alla kolumner
+    for col in df.columns:
+        normalized_col = unicodedata.normalize("NFC", str(col))
+        # Vi uppdaterar bara om blocking är avstängt ELLER om det är första gången kolumnen ses
+        if not getattr(state, "semantic_drift_blocking", False) or normalized_col not in state.semantic_fingerprint:
+            state.semantic_fingerprint[normalized_col] = calculate_column_semantic_type(df[col])
 
     # ---------------------------------------------------------
     # 6. Column lineage

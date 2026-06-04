@@ -381,7 +381,8 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
             if current_schema != existing_schema:
                 raise HTTPException(status_code=400, detail="Schema lineage and drift detected")
 
-        if getattr(state, "semantic_drift_blocking", False) and getattr(state, "schema_drift_blocking", True):
+        if getattr(state, "semantic_drift_blocking", False):
+            # --- SEMANTISK DRIFT ---
             for col in df.columns:
                 normalized_col = unicodedata.normalize("NFC", str(col))
                 if normalized_col in state.semantic_fingerprint:
@@ -389,7 +390,17 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
                     new_semantic_type = calculate_column_semantic_type(df[col])
                     
                     if old_semantic_type != new_semantic_type:
-                        raise HTTPException(status_code=400, detail=f"Semantic drift detected for column: {normalized_col}")
+                        # KANONISERINGSHANTERING: Om en typändring är godkänd strukturellt 
+                        # (t.ex int32 -> int64), låt oss kontrollera om de är kompatibla
+                        old_str = str(old_semantic_type).lower()
+                        new_str = str(new_semantic_type).lower()
+                        
+                        # Om båda innehåller "int" eller båda innehåller "float", strunta i att blockera!
+                        is_both_int = "int" in old_str and "int" in new_str
+                        is_both_float = "float" in old_str and "float" in new_str
+                        
+                        if not (is_both_int or is_both_float or not getattr(state, "schema_drift_blocking", True)):
+                            raise HTTPException(status_code=400, detail=f"Semantic drift detected for column: {normalized_col}")
 
     # ---------------------------------------------------------
     # 5. Spara dataset & Kanonisera fingeravtryck

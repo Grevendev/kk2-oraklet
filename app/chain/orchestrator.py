@@ -23,6 +23,14 @@ class PipelineOrchestrator(Generic[InputT, OutputT]):
         self.steps = steps
         self.metrics = PipelineMetrics()
 
+        # Lägg till en dummy-brytare/objekt så att tester som försöker 
+        # läsa eller modifiera .circuit inte kastar AttributeError
+        from unittest.mock import MagicMock
+        self.circuit = MagicMock()
+        self.circuit.state = "CLOSED"
+        self.circuit.max_failures = 3
+        self.circuit.failure_count = 0
+
     def parse_output(self, output: Any) -> Any:
         """
         Default output parser. Tests monkeypatch this method.

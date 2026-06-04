@@ -381,8 +381,7 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
             if current_schema != existing_schema:
                 raise HTTPException(status_code=400, detail="Schema lineage and drift detected")
 
-        if getattr(state, "semantic_drift_blocking", False):
-            # --- SEMANTISK DRIFT ---
+        if getattr(state, "semantic_drift_blocking", False) and getattr(state, "schema_drift_blocking", True):
             for col in df.columns:
                 normalized_col = unicodedata.normalize("NFC", str(col))
                 if normalized_col in state.semantic_fingerprint:

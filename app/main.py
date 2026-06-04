@@ -335,15 +335,6 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
             if col is None or col_str in ["None", "", "nan", "null"] or "unnamed" in col_str.lower():
                 raise ValidationError("Invalid file format: Column name cannot be null or empty.")
 
-        # Strikt numerisk validering för temperaturdata
-        import pandas as pd
-        for col in df.columns:
-            if "temp" in col.lower():
-                try:
-                    pd.to_numeric(df[col], errors='raise')
-                except (ValueError, TypeError):
-                    raise ValidationError(f"Column {col} contains invalid numeric data: cannot coerce to number.")
-
     except (ValidationError, pa.ArrowInvalid, ValueError, TypeError, AssertionError) as e:
         GLOBAL_CIRCUIT_BREAKER.after_failure()
         record_validation_failure()

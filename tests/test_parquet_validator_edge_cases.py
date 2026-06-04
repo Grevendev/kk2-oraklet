@@ -43,10 +43,23 @@ def test_wrong_mime_type():
 
 
 def test_duplicate_columns():
-    table = pa.table({"city": ["A"], "city": ["B"]})
+    schema = pa.schema([
+        ("city", pa.string()),
+        ("city", pa.string()),
+    ])
+
+    table = pa.Table.from_arrays(
+        [
+            pa.array(["A"]),
+            pa.array(["B"]),
+        ],
+        schema=schema
+    )
+
     res = upload_parquet(table)
     assert res.status_code == 422
     assert "duplicate" in res.text.lower()
+
 
 
 def test_empty_column_name():

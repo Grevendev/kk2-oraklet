@@ -311,7 +311,7 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
 
     file_bytes = await file.read()
 
-    # ---------------------------------------------------------
+   # ---------------------------------------------------------
     # 2. CSV/Parquet validering → ticka CB vid valideringsfel
     # ---------------------------------------------------------
     try:
@@ -321,8 +321,7 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
             try:
                 df = await run_in_threadpool(data_service.validate_and_clean_parquet, file_bytes)
             except UserError as ue:
-                # Om schema-drift/typändring sker inifrån data_service men blocking är avstängt,
-                # läser vi in data rått via pyarrow. Annars kastar vi vidare till steg 4.
+                # OM blocking är AVSTÄNGT: Tvinga fram en rå inläsning så att vi tillåter uppdateringen!
                 if not getattr(state, "schema_drift_blocking", False):
                     import pyarrow.parquet as pq
                     import io
@@ -339,12 +338,13 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
     except (ValidationError, pa.ArrowInvalid, ValueError, TypeError, AssertionError) as e:
         GLOBAL_CIRCUIT_BREAKER.after_failure()
         record_validation_failure()
-        # test_mixed_numeric_and_string m.fl. vill ha status 422
         raise HTTPException(status_code=422, detail=f"Validation error: {str(e)}")
     except UserError as ue:
         # Om vi ska blockera (blocking=True), kasta direkt en HTTP 400 till drift-testerna
-        if getattr(state, "schema_drift_blocking", False):
-            raise HTTPException(status_code=400, detail=f"Schema drift detected: {str(ue)}")
+        raise HTTPException(status_code=400, detail=f"Schema drift blocked: {str(ue)}")
+    except Exception:
+        GLOBAL_CIRCUIT_BREAKER.after_failure()
+        raise
 
     # ---------------------------------------------------------
     # 3. Normalisera kolumnnamn
@@ -352,14 +352,14 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
     df.columns = [unicodedata.normalize("NFC", str(data_service._normalize(col))) for col in df.columns]
 
     # ---------------------------------------------------------
-    # 4. Schema drift & Semantic drift → HTTP 400
+    # 4. Schema drift & Semantic drift → HTTP 400 (Körs endast om blocking=True)
     # ---------------------------------------------------------
     if not hasattr(state, "semantic_fingerprint") or state.semantic_fingerprint is None:
         state.semantic_fingerprint = {}
 
     if data_service._df is not None:
-        # --- STRUKTURELL SCHEMA DRIFT ---
         if getattr(state, "schema_drift_blocking", False):
+            # --- STRUKTURELL SCHEMA DRIFT ---
             current_schema = {}
             for col, dtype in df.dtypes.items():
                 dt_str = str(dtype)
@@ -378,8 +378,8 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
             if current_schema != existing_schema:
                 raise HTTPException(status_code=400, detail="Schema lineage and drift detected")
 
-        # --- SEMANTISK DRIFT ---
         if getattr(state, "semantic_drift_blocking", False):
+            # --- SEMANTISK DRIFT ---
             for col in df.columns:
                 normalized_col = unicodedata.normalize("NFC", str(col))
                 if normalized_col in state.semantic_fingerprint:

@@ -321,6 +321,10 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
             if col is None or col_str in ["None", "", "nan", "null"] or "unnamed" in col_str.lower():
                 raise ValidationError("Invalid file format: Column name cannot be null or empty.")
             
+        # Kanonisering: Sortera kolumerna alfabetiskt efter namn
+        sorted_columns = sorted(list(df.columns), key=lambda c: str(c))
+        df = df[sorted_columns]
+            
 
 
     except ValidationError:

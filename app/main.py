@@ -347,26 +347,25 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
         raise SystemError("Unexpected internal error")
 
     # ---------------------------------------------------------
-    # 3. Normalisera kolumnnamn
+    # 3. Normalisera kolumnnamn (Fixar Unicode-ekvivalens för ALLA steg)
     # ---------------------------------------------------------
-    df.columns = [data_service._normalize(col) for col in df.columns]
+    df.columns = [unicodedata.normalize("NFC", str(data_service._normalize(col))) for col in df.columns]
 
     # ---------------------------------------------------------
     # 4. Schema drift → UserError (tickar inte CB)
     # ---------------------------------------------------------
     if data_service._df is not None:
-        # 1. Skapa en kopia av df för att inte förstöra originalets ordning/namn
-        df_canonical = df.copy()
+        # Hämta de nuvarande kolumnerna och de gamla kolumnerna som sorterade listor
+        current_cols = sorted(list(df.columns))
+        existing_cols = sorted(list(data_service._df.columns))
         
-        # 2. Normalisera kolumnnamnen till NFC Unicode för drift-kontrollen
-        df_canonical.columns = [unicodedata.normalize("NFC", str(col)) for col in df_canonical.columns]
+        # Om uppsättningen kolumner inte är exakt likadan, eller om data_service 
+        # upptäcker typförändringar (is_schema_changed), trigga schema drift.
+        # Vi sorterar temporärt här för att ignorera ordningsföljden.
+        df_sorted = df[current_cols]
         
-        # 3. Sortera kolumnerna alfabetiskt så att ordningen blir irrelevant
-        sorted_canonical_cols = sorted(list(df_canonical.columns))
-        df_canonical = df_canonical[sorted_canonical_cols]
-        
-        # 4. Kör drift-kontrollen på det kanoniserade schemat
-        if data_service.is_schema_changed(df_canonical):
+        # Vi kollar först om kolumnuppsättningen skiljer sig
+        if current_cols != existing_cols or data_service.is_schema_changed(df_sorted):
             if state.schema_drift_blocking:
                 raise UserError("Schema drift detected")
 

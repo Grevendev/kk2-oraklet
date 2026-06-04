@@ -24,7 +24,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
 from fastapi.middleware.gzip import GZipMiddleware
-
+from app.semantic import calculate_column_semantic_type
 from app.api.ai import router as ai_router
 from app.api.ai import clear_ai_cache
 

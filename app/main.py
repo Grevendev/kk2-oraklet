@@ -315,6 +315,14 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
         else:
             df = await run_in_threadpool(data_service.validate_and_clean_parquet, file_bytes)
 
+        # Ny Kontroll, stoppa ogiltiga kolumnnamn
+        for col in df.columns:
+            col_str = str(col).strip()
+            if col is None or col_str == "None" or col_str == "":
+                raise ValidationError("Invalid file format: Column nae cannot be null or empty.")
+            
+
+
     except ValidationError:
         GLOBAL_CIRCUIT_BREAKER.after_failure()
         record_validation_failure()

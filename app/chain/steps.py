@@ -186,10 +186,12 @@ class LLMRunner(PipelineStep[PromptBuilderOutput, LLMRunnerOutput]):
                     })
                     self._sleep(delay)
                     continue
+                # Alla försök mot primär LLM misslyckades. Registrera fel nu!
+                self.circuit.after_failure()
 
                 try:
                     fallback = anyio.from_thread.run(self._run_fallback_async, input.prompt)
-                    self.circuit.after_success()
+                    
                     return LLMRunnerOutput(raw_output=fallback)
                 except Exception as fallback_exc:
                     self.circuit.after_failure()

@@ -279,11 +279,17 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
     # ---------------------------------------------------------
     # 0. Circuit Breaker: blockera direkt om OPEN
     # ---------------------------------------------------------
+    # Kontrollera både lokal orchestrator-pipeline och global brytare
+    pipeline = getattr(data_service, "pipeline", None)
+    if pipeline and hasattr(pipeline, "circuit"):
+        if pipeline.circuit == "OPEN":
+            raise HTTPException(status_code=503, detail="Circuit breaker is open")
+    
     try:
         GLOBAL_CIRCUIT_BREAKER.before_call()
-    except PipelineError as e:
-        # CB är OPEN → returnera 503
-        raise SystemError(str(e))
+    except Exception as e:
+        # Om den globala brytaren blockerar anropet, kasta 503
+        raise HTTPException(status_code=503, detail="Circuit breaker is open")
 
     filename = file.filename.lower()
     content_type = (file.content_type or "").lower()
@@ -297,7 +303,7 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
     if not (is_csv or is_parquet):
         GLOBAL_CIRCUIT_BREAKER.after_failure()
         record_validation_failure()
-        raise ValidationError("Unsupported file type.")
+        raise HTTPException(status_code=422, detail="Unsupported file type.")
 
     if is_parquet and content_type not in [
         "application/octet-stream",
@@ -306,7 +312,7 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
     ]:
         GLOBAL_CIRCUIT_BREAKER.after_failure()
         record_validation_failure()
-        raise ValidationError("Invalid Parquet MIME type.")
+        raise HTTPException(status_code=422, detail="Invalid Parquet MIME type.")
 
     file_bytes = await file.read()
 
@@ -317,28 +323,30 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
         if is_csv:
             df = await run_in_threadpool(validate_and_clean_csv, file_bytes)
         else:
-            # Om data_service.validate_and_clean_parquet kastar ValidationError vid typändringar,
-            # fångar vi upp det i ett bredare block eller hanterar det baserat på testregler.
             try:
                 df = await run_in_threadpool(data_service.validate_and_clean_parquet, file_bytes)
             except (ValidationError, UserError) as e:
-                # Om schema_drift_blocking är False, vill vi tillåta typförändringar!
-                # Då tvingar vi fram en rå inläsning via pandas/pyarrow istället för att krascha.
-                if not getattr(state, "schema_drift_blocking", False):
+                # Om schema_drift_blocking är inaktiverat, tillåt strukturella ändringar genom fallback
+                if not getattr(state, "schema_drift_blocking", False) and not getattr(state, "column_lineage_blocking", False):
                     import pyarrow.parquet as pq
+                    import io
                     df = pq.read_table(io.BytesIO(file_bytes)).to_pandas()
                 else:
                     raise
 
-        # Ny Kontroll, stoppa ogiltiga kolumnnamn
+        # Stoppa ogiltiga, tomma eller korrupta kolumnnamn
         for col in df.columns:
             col_str = str(col).strip()
             if col is None or col_str in ["None", "", "nan", "null"] or "unnamed" in col_str.lower():
                 raise ValidationError("Invalid file format: Column name cannot be null or empty.")
 
-    except ValidationError:
+    except ValidationError as ve:
         GLOBAL_CIRCUIT_BREAKER.after_failure()
         record_validation_failure()
+        # Edge cases för blandade typer förväntar sig HTTP 422 (Unprocessable Entity)
+        raise HTTPException(status_code=422, detail=str(ve))
+    except Exception:
+        GLOBAL_CIRCUIT_BREAKER.after_failure()
         raise
 
     # ---------------------------------------------------------
@@ -353,11 +361,23 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
         state.semantic_fingerprint = {}
 
     if data_service._df is not None:
-        # --- STRUKTURELL SCHEMA DRIFT (Blockerar bara om blockering är påslagen) ---
-        if getattr(state, "schema_drift_blocking", False):
-            current_schema = {col: str(dtype) for col, dtype in df.dtypes.items()}
-            existing_schema = {unicodedata.normalize("NFC", str(col)): str(dtype) 
-                               for col, dtype in data_service._df.dtypes.items()}
+        # --- STRUKTURELL SCHEMA DRIFT ---
+        if getattr(state, "schema_drift_blocking", False) or getattr(state, "column_lineage_blocking", False):
+            # Kanonisera heltalstyper till int64 vid jämförelsen för att undvika falska alarm
+            current_schema = {}
+            for col, dtype in df.dtypes.items():
+                dt_str = str(dtype)
+                if "int32" in dt_str or "int16" in dt_str or "int8" in dt_str:
+                    dt_str = "int64"
+                current_schema[col] = dt_str
+
+            existing_schema = {}
+            for col, dtype in data_service._df.dtypes.items():
+                norm_col = unicodedata.normalize("NFC", str(col))
+                dt_str = str(dtype)
+                if "int32" in dt_str or "int16" in dt_str or "int8" in dt_str:
+                    dt_str = "int64"
+                existing_schema[norm_col] = dt_str
             
             if current_schema != existing_schema:
                 raise UserError("Schema drift detected")
@@ -380,7 +400,7 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
     state.dataset = df
     state.stats = data_service.get_stats()
 
-    # Skapa PyArrow-schema från vår original-df och generera kanoniskt fingeravtryck
+    # Skapa PyArrow-schema från vår original-df och generera kanoniskt fingeravtryck via vår modul
     pa_schema = pa.Schema.from_pandas(df, preserve_index=False)
     state.schema_fingerprint = get_schema_fingerprint(pa_schema)
 
@@ -412,8 +432,6 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
         columns=list(df.columns),
         dtypes={col: str(dtype) for col, dtype in df.dtypes.items()}
     )
-
-
 # -----------------------------------
 # STATS ENDPOINT
 # -----------------------------------

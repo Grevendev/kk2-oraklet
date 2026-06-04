@@ -12,20 +12,23 @@ def calculate_column_semantic_type(series: pd.Series) -> str:
 
     dtype_str = str(clean_series.dtype)
     
-    # Inspektera object, string och kategorier på djupet
+    # Om det är en sträng-, kategori- eller generisk objekt-kolumn, inspektera värdena
     if dtype_str == "object" or "string" in dtype_str or "category" in dtype_str:
+        # Konvertera alla element till strängar och rensa whitespace
+        str_values = [str(x).strip() for x in clean_series]
+        
         def is_numeric_str(val):
             try:
-                float(str(val).strip())
+                float(val)
                 return True
             except (ValueError, TypeError):
                 return False
                 
-        if all(is_numeric_str(x) for x in clean_series):
+        if all(is_numeric_str(x) for x in str_values):
             return "numeric_string"
         return "categorical_string"
 
-    # Regel för floats (t.ex. 1.2 vs 1.0)
+    # Regel for floats (t.ex. 1.2 vs 1.0)
     if "float" in dtype_str:
         if all(float(x).is_integer() for x in clean_series):
             return "discrete_float"

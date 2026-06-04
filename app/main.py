@@ -347,7 +347,7 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
         raise SystemError("Unexpected internal error")
 
     # ---------------------------------------------------------
-    # 3. Normalisera kolumnnamn (Fixar Unicode-ekvivalens för ALLA steg)
+    # 3. Normalisera kolumnnamn (Fixar Unicode-ekvivalens tidigt)
     # ---------------------------------------------------------
     df.columns = [unicodedata.normalize("NFC", str(data_service._normalize(col))) for col in df.columns]
 
@@ -355,17 +355,15 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
     # 4. Schema drift → UserError (tickar inte CB)
     # ---------------------------------------------------------
     if data_service._df is not None:
-        # Hämta de nuvarande kolumnerna och de gamla kolumnerna som sorterade listor
-        current_cols = sorted(list(df.columns))
-        existing_cols = sorted(list(data_service._df.columns))
+        # Skapa en ordningsoberoende ordlista av nuvarande datatyper (alla i NFC)
+        current_schema = {col: str(dtype) for col, dtype in df.dtypes.items()}
         
-        # Om uppsättningen kolumner inte är exakt likadan, eller om data_service 
-        # upptäcker typförändringar (is_schema_changed), trigga schema drift.
-        # Vi sorterar temporärt här för att ignorera ordningsföljden.
-        df_sorted = df[current_cols]
+        # Skapa motsvarande ordlista från det befintliga datasetet
+        existing_schema = {unicodedata.normalize("NFC", str(col)): str(dtype) 
+                           for col, dtype in data_service._df.dtypes.items()}
         
-        # Vi kollar först om kolumnuppsättningen skiljer sig
-        if current_cols != existing_cols or data_service.is_schema_changed(df_sorted):
+        # Jämför om scheman matchar strukturellt (bortsett från kolumnordning)
+        if current_schema != existing_schema:
             if state.schema_drift_blocking:
                 raise UserError("Schema drift detected")
 

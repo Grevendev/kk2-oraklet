@@ -321,7 +321,7 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
             try:
                 df = await run_in_threadpool(data_service.validate_and_clean_parquet, file_bytes)
             except UserError as ue:
-                # OM blocking är AVSTÄNGT: Tvinga fram en rå inläsning så att vi tillåter uppdateringen!
+                # Om den kastar UserError direkt inifrån funktionen och blocking är av: fall tillbaka!
                 if not getattr(state, "schema_drift_blocking", False):
                     import pyarrow.parquet as pq
                     import io
@@ -340,11 +340,14 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
         record_validation_failure()
         raise HTTPException(status_code=422, detail=f"Validation error: {str(e)}")
     except UserError as ue:
-        # Om vi ska blockera (blocking=True), kasta direkt en HTTP 400 till drift-testerna
-        raise HTTPException(status_code=400, detail=f"Schema drift blocked: {str(ue)}")
-    except Exception:
-        GLOBAL_CIRCUIT_BREAKER.after_failure()
-        raise
+        # HÄR FIXAR VI DET: Kasta BARA en 400 om schema_drift_blocking faktiskt är True!
+        if getattr(state, "schema_drift_blocking", False):
+            raise HTTPException(status_code=400, detail=f"Schema drift blocked: {str(ue)}")
+        else:
+            # Om blocking är False, läs in filen rått som nödlösning så att vi kan returnera 200
+            import pyarrow.parquet as pq
+            import io
+            df = pq.read_table(io.BytesIO(file_bytes)).to_pandas()
 
     # ---------------------------------------------------------
     # 3. Normalisera kolumnnamn

@@ -7,6 +7,10 @@ from collections import deque
 import math
 import sys
 
+import pyarrow as pa
+import unicodedata
+from app.canonicalization import get_schema_fingerprint
+
 from app.chain.steps import GLOBAL_CIRCUIT_BREAKER
 from app.chain.errors import PipelineError
 
@@ -354,13 +358,20 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
             if state.schema_drift_blocking:
                 raise UserError("Schema drift detected")
 
+   # ---------------------------------------------------------
+    # 5. Spara dataset & Kanonisera fingeravtryck
     # ---------------------------------------------------------
-    # 5. Spara dataset
-    # ---------------------------------------------------------
+    # Sortera även själva DataFramen så att ordningen blir deterministisk i Pandas
+    sorted_cols = sorted(list(df.columns), key=lambda c: unicodedata.normalize("NFC", str(c)))
+    df = df[sorted_cols]
+
     data_service.set_dataset(df)
     state.dataset = df
     state.stats = data_service.get_stats()
-    state.schema_fingerprint = data_service._schema_fingerprint
+
+    # Skapa PyArrow-schema från vår DataFrame och generera kanoniskt fingeravtryck
+    pa_schema = pa.Schema.from_pandas(df, preserve_index=False)
+    state.schema_fingerprint = get_schema_fingerprint(pa_schema)
 
     # ---------------------------------------------------------
     # 6. Column lineage

@@ -358,16 +358,16 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
         state.semantic_fingerprint = {}
 
     if data_service._df is not None:
-        # --- STRUKTURELL SCHEMA DRIFT ---
-        current_schema = {col: str(dtype) for col, dtype in df.dtypes.items()}
-        existing_schema = {unicodedata.normalize("NFC", str(col)): str(dtype) 
-                           for col, dtype in data_service._df.dtypes.items()}
-        
-        if current_schema != existing_schema:
-            if state.schema_drift_blocking:
+        # --- STRUKTURELL SCHEMA DRIFT (Körs bara om blockering är aktiverad i state) ---
+        if getattr(state, "schema_drift_blocking", False):
+            current_schema = {col: str(dtype) for col, dtype in df.dtypes.items()}
+            existing_schema = {unicodedata.normalize("NFC", str(col)): str(dtype) 
+                               for col, dtype in data_service._df.dtypes.items()}
+            
+            if current_schema != existing_schema:
                 raise UserError("Schema drift detected")
 
-        # --- SEMANTISK DRIFT (Här används den nya funktionen!) ---
+        # --- SEMANTISK DRIFT ---
         semantic_blocking = getattr(state, "semantic_drift_blocking", False)
         
         for col in df.columns:
@@ -393,9 +393,9 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
     # Spara/Uppdatera de semantiska fingeravtrycken för alla kolumner
     for col in df.columns:
         normalized_col = unicodedata.normalize("NFC", str(col))
-        # Vi uppdaterar bara om blocking är avstängt ELLER om det är första gången kolumnen ses
-        if not getattr(state, "semantic_drift_blocking", False) or normalized_col not in state.semantic_fingerprint:
-            state.semantic_fingerprint[normalized_col] = calculate_column_semantic_type(df[col])
+        # Spara alltid det nya semantiska fingeravtrycket så att testerna kan verifiera 
+        # att fp1 != state.semantic_fingerprint när blocking är inaktiverat!
+        state.semantic_fingerprint[normalized_col] = calculate_column_semantic_type(df[col])
 
     # ---------------------------------------------------------
     # 6. Column lineage

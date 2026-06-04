@@ -358,7 +358,7 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
         state.semantic_fingerprint = {}
 
     if data_service._df is not None:
-        # --- STRUKTURELL SCHEMA DRIFT (Körs bara om blockering är aktiverad i state) ---
+        # --- STRUKTURELL SCHEMA DRIFT (Körs ENDAST om blocking är aktivt) ---
         if getattr(state, "schema_drift_blocking", False):
             current_schema = {col: str(dtype) for col, dtype in df.dtypes.items()}
             existing_schema = {unicodedata.normalize("NFC", str(col)): str(dtype) 
@@ -393,8 +393,8 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
     # Spara/Uppdatera de semantiska fingeravtrycken för alla kolumner
     for col in df.columns:
         normalized_col = unicodedata.normalize("NFC", str(col))
-        # Spara alltid det nya semantiska fingeravtrycket så att testerna kan verifiera 
-        # att fp1 != state.semantic_fingerprint när blocking är inaktiverat!
+        # Vi sparar ALLTID det nya semantiska värdet så att tester med 
+        # blocking=False kan verifiera att fingeravtrycket faktiskt ändrades (fp1 != fp2)
         state.semantic_fingerprint[normalized_col] = calculate_column_semantic_type(df[col])
 
     # ---------------------------------------------------------

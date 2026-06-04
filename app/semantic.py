@@ -3,18 +3,17 @@ import pandas as pd
 
 def calculate_column_semantic_type(series: pd.Series) -> str:
     """
-    Returnerar en semantisk profil/typ för en kolumn baserat på dess innehåll.
+    Returnerar en semantisk profil för en kolumn baserat på dess faktiska innehåll.
     Särskiljer numeriska strängar, kategoriska strängar, diskreta och kontinuerliga floats.
     """
     clean_series = series.dropna()
     if clean_series.empty:
         return "empty"
 
-    # Konvertera till sträng-representation för att analysera object/string-typer
     dtype_str = str(clean_series.dtype)
     
+    # Om det är en sträng-, kategori- eller generisk objekt-kolumn, inspektera värdena
     if dtype_str == "object" or "string" in dtype_str or "category" in dtype_str:
-        # Kolla om alla värden går att tolka som siffror (t.ex. "10", "1.2")
         def is_numeric_str(val):
             try:
                 float(str(val).strip())

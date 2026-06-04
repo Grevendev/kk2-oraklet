@@ -181,12 +181,10 @@ class DataService:
             names = schema.names
 
             # -----------------------------------------------------------------
-            # FIX 1: Fånga upp om PyArrow har strängifierat None till "None"
+            # KIRURGISK FIX 1: Spara bara exakt för "None" och tomma strängar
             # -----------------------------------------------------------------
-            for n in names:
-                n_str = str(n).strip()
-                if n is None or n_str in ["", "None", "null", "nan"] or "unnamed" in n_str.lower():
-                    raise ValidationError("Empty or null column name.")
+            if any(n is None or str(n).strip() in ["", "None"] for n in names):
+                raise ValidationError("Empty or null column name.")
 
             if len(names) != len(set(names)):
                 raise ValidationError("Duplicate columns detected.")
@@ -201,7 +199,7 @@ class DataService:
                 column = table.column(col_idx)
 
                 seen_int = False
-                view_float = False
+                seen_float = False
 
                 for chunk in column.chunks:
                     arrow_type = chunk.type
@@ -236,10 +234,10 @@ class DataService:
             cleaned = []
             for col in df.columns:
                 # -------------------------------------------------------------
-                # FIX 2: Samma utökade kontroll här efter Pandas-konverteringen
+                # KIRURGISK FIX 2: Matcha exakt samma villkor här efter Pandas
                 # -------------------------------------------------------------
                 col_str = str(col).strip()
-                if col is None or col_str in ["", "None", "null", "nan"] or "unnamed" in col_str.lower():
+                if col is None or col_str in ["", "None"]:
                     raise ValidationError("Empty or null column name.")
                 cleaned.append(col_str)
                 
@@ -275,14 +273,14 @@ class DataService:
             for col in df.columns:
                 s = df[col]
                 if s.apply(lambda x: isinstance(x, (int, float))).any() and \
-                s.apply(lambda x: isinstance(x, str)).any():
+                   s.apply(lambda x: isinstance(x, str)).any():
                     raise ValidationError("Mixed numeric and string values.")
 
             # Bool + int → promote to int
             for col in df.columns:
                 s = df[col]
                 if s.apply(lambda x: isinstance(x, bool)).any() and \
-                s.apply(lambda x: isinstance(x, int)).any():
+                   s.apply(lambda x: isinstance(x, int)).any():
                     df[col] = s.astype(int)
 
             # Nullability check

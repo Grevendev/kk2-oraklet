@@ -180,8 +180,13 @@ class DataService:
             schema = parquet_file.schema_arrow
             names = schema.names
 
-            if any(n is None or str(n).strip() == "" for n in names):
-                raise ValidationError("Empty or null column name.")
+            # -----------------------------------------------------------------
+            # FIX 1: Fånga upp om PyArrow har strängifierat None till "None"
+            # -----------------------------------------------------------------
+            for n in names:
+                n_str = str(n).strip()
+                if n is None or n_str in ["", "None", "null", "nan"] or "unnamed" in n_str.lower():
+                    raise ValidationError("Empty or null column name.")
 
             if len(names) != len(set(names)):
                 raise ValidationError("Duplicate columns detected.")
@@ -196,7 +201,7 @@ class DataService:
                 column = table.column(col_idx)
 
                 seen_int = False
-                seen_float = False
+                view_float = False
 
                 for chunk in column.chunks:
                     arrow_type = chunk.type
@@ -214,7 +219,6 @@ class DataService:
             df = table.to_pandas()
             logger.error("DEBUG: to_pandas() OK")
 
-            
             # Mixed int/float AFTER pandas
             for col in df.columns:
                 s = df[col]
@@ -231,9 +235,14 @@ class DataService:
             # Column cleanup + normalization
             cleaned = []
             for col in df.columns:
-                if col is None or str(col).strip() == "":
+                # -------------------------------------------------------------
+                # FIX 2: Samma utökade kontroll här efter Pandas-konverteringen
+                # -------------------------------------------------------------
+                col_str = str(col).strip()
+                if col is None or col_str in ["", "None", "null", "nan"] or "unnamed" in col_str.lower():
                     raise ValidationError("Empty or null column name.")
-                cleaned.append(str(col).strip())
+                cleaned.append(col_str)
+                
             df.columns = cleaned
             df.columns = [self._normalize(col) for col in df.columns]
 
@@ -260,21 +269,20 @@ class DataService:
                                     has_non_numeric = True
 
                                 if has_numeric_like and has_non_numeric:
-                    
                                     raise ValidationError("Nested list contains mixed types.")
 
             # Mixed numeric + string
             for col in df.columns:
                 s = df[col]
                 if s.apply(lambda x: isinstance(x, (int, float))).any() and \
-                   s.apply(lambda x: isinstance(x, str)).any():
+                s.apply(lambda x: isinstance(x, str)).any():
                     raise ValidationError("Mixed numeric and string values.")
 
             # Bool + int → promote to int
             for col in df.columns:
                 s = df[col]
                 if s.apply(lambda x: isinstance(x, bool)).any() and \
-                   s.apply(lambda x: isinstance(x, int)).any():
+                s.apply(lambda x: isinstance(x, int)).any():
                     df[col] = s.astype(int)
 
             # Nullability check
@@ -287,7 +295,6 @@ class DataService:
         except ValidationError as e:
             GLOBAL_CIRCUIT_BREAKER.after_failure()
             raise
-
 
 # ============================================================
 # CSV VALIDATOR (unchanged)

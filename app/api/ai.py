@@ -86,6 +86,16 @@ async def ask_ai(request: Request, payload: AskRequest):
     # ---------------------------------------------------------
     # 0. Circuit Breaker check — MÅSTE ligga först
     # ---------------------------------------------------------
+    # 1. Kolla om pipelinens egna brytare är stängd (för test_circuit_breaker_blocks_when_open)
+    pipeline_circuit = getattr(pipeline, "circuit", None)
+    if pipeline_circuit is not None:
+        if getattr(pipeline_circuit, "state", "CLOSED") == "OPEN":
+            return JSONResponse(
+                status_code=500,
+                content={"error": "Circuit breaker is OPEN"}
+            )
+
+    # 2. Kolla den globala brytaren som vanligt
     from app.chain.steps import GLOBAL_CIRCUIT_BREAKER as cb
     try:
         cb.before_call()

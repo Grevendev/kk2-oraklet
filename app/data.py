@@ -162,7 +162,7 @@ class DataService:
         return self._parquet_bytes
 
     # ---------------------------------------------------------
-    # PARQUET VALIDATOR WITH LOGGING
+    # PARQUET VALIDATOR
     # ---------------------------------------------------------
     def validate_and_clean_parquet(self, file_bytes: bytes) -> pd.DataFrame:
         try:
@@ -172,27 +172,17 @@ class DataService:
             if file_bytes[:4] != b"PAR1":
                 raise ValidationError("Invalid Parquet magic bytes.")
 
-            # LOGGING 1 — ParquetFile()
-            logger.error("DEBUG: entering ParquetFile()")
             parquet_file = pq.ParquetFile(pa.BufferReader(file_bytes))
-            logger.error("DEBUG: ParquetFile() OK")
-
             schema = parquet_file.schema_arrow
             names = schema.names
 
-            # -----------------------------------------------------------------
-            # KIRURGISK FIX 1: Spara bara exakt för "None" och tomma strängar
-            # -----------------------------------------------------------------
             if any(n is None or str(n).strip() in ["", "None"] for n in names):
                 raise ValidationError("Empty or null column name.")
 
             if len(names) != len(set(names)):
                 raise ValidationError("Duplicate columns detected.")
 
-            # LOGGING 2 — read()
-            logger.error("DEBUG: entering parquet_file.read()")
             table = parquet_file.read()
-            logger.error("DEBUG: read() OK")
 
             # Mixed int/float detection BEFORE pandas
             for col_idx in range(table.num_columns):
@@ -212,10 +202,7 @@ class DataService:
                     if seen_int and seen_float:
                         raise ValidationError("Mixed int and float values.")
 
-            # LOGGING 3 — to_pandas()
-            logger.error("DEBUG: entering table.to_pandas()")
             df = table.to_pandas()
-            logger.error("DEBUG: to_pandas() OK")
 
             # Mixed int/float AFTER pandas
             for col in df.columns:
@@ -233,9 +220,6 @@ class DataService:
             # Column cleanup + normalization
             cleaned = []
             for col in df.columns:
-                # -------------------------------------------------------------
-                # KIRURGISK FIX 2: Matcha exakt samma villkor här efter Pandas
-                # -------------------------------------------------------------
                 col_str = str(col).strip()
                 if col is None or col_str in ["", "None"]:
                     raise ValidationError("Empty or null column name.")

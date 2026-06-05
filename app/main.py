@@ -27,7 +27,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from app.semantic import calculate_column_semantic_type
 from app.api.ai import router as ai_router
 from app.api.ai import clear_ai_cache
-
+from app.validation import run_data_validation
 from app.errors import (
     http_exception_handler,
     ValidationError,
@@ -299,7 +299,7 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
     if not (is_csv or is_parquet):
         GLOBAL_CIRCUIT_BREAKER.after_failure()
         record_validation_failure()
-        raise HTTPException(status_code=422, detail="Unsupported file type.")
+        raise ValidationError("Unsupported file type.")
 
     if is_parquet and content_type not in [
         "application/octet-stream",
@@ -308,10 +308,13 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
     ]:
         GLOBAL_CIRCUIT_BREAKER.after_failure()
         record_validation_failure()
-        raise HTTPException(status_code=422, detail="Invalid Parquet MIME type.")
+        raise ValidationError("Invalid Parquet MIME type.")
 
     file_bytes = await file.read()
 
+    # ---------------------------------------------------------
+    # 2. CSV/Parquet validering → ticka CB vid valideringsfel
+    # ---------------------------------------------------------
     # ---------------------------------------------------------
     # 2. CSV/Parquet validering → ticka CB vid valideringsfel
     # ---------------------------------------------------------
@@ -329,36 +332,20 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
                 else:
                     raise ue
 
-        # Stoppa ogiltiga kolumnnamn
-        for col in df.columns:
-            col_str = str(col).strip()
-            if col is None or col_str in ["None", "", "nan", "null"] or "unnamed" in col_str.lower():
-                raise ValidationError("Invalid file format: Column name cannot be null or empty.")
-        # Strikt numerisk validering för kända numeriska kolumner
-        import pandas as pd
-        for col in df.columns:
-            normalized_col = unicodedata.normalize("NFC", str(col))
+        # Validering via extern modul (ersätter lokala if-satser)
+        from app.validation import run_data_validation
+        run_data_validation(df)
             
-            # Kolla enbart om vi har ett etablerat fingeravtryck som säger att det är numeriskt
-            semantic_type = state.semantic_fingerprint.get(normalized_col)
-            
-            # Vi definierar vad som räknas som numeriskt i vårt system
-            known_numeric_types = ["int64", "float64", "int", "float", "str:numeric"]
-            
-            if semantic_type in known_numeric_types:
-                try:
-                    # Vi försöker konvertera - om det är numeriskt fingeravtryck men innehåller "hej",
-                    # så kommer to_numeric att kasta ValueError/TypeError
-                    pd.to_numeric(df[col], errors='raise')
-                except (ValueError, TypeError):
-                    raise ValidationError(f"Column {col} is registered as numeric but contains invalid non-numeric data.")
     except (ValidationError, pa.ArrowInvalid, ValueError, TypeError, AssertionError) as e:
         GLOBAL_CIRCUIT_BREAKER.after_failure()
         record_validation_failure()
-        raise HTTPException(status_code=422, detail=f"Validation error: {str(e)}")
+        # Kasta ValidationError för att trigga din validation_error_handler
+        raise ValidationError(str(e))
+        
     except UserError as ue:
         if getattr(state, "schema_drift_blocking", False):
-            raise HTTPException(status_code=400, detail=f"Schema drift blocked: {str(ue)}")
+            # UserError fångas av user_error_handler
+            raise ue 
         else:
             import pyarrow.parquet as pq
             import io

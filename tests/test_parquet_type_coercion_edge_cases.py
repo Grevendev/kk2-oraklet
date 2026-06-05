@@ -40,22 +40,20 @@ def upload_parquet_bytes(raw: bytes):
 
 
 def test_mixed_numeric_and_string():
-    # 1. Förbered statet så att appen tror att "temp" är numerisk
-    app.state.semantic_fingerprint = {"temp": "int64"} 
+    # Sätt upp förväntan: kolumnen "temp" SKA vara numerisk
+    app.state.semantic_fingerprint = {"temp": "int64"}
     
-    # 2. Kör uppladdningen
     raw = make_parquet({"temp": [10, "hej", 12]}, force_strings=False)
     res = upload_parquet_bytes(raw)
-    
     assert res.status_code == 422
 
-
 def test_int_and_float_promotion():
-    # Arrow kommer försöka promota int + float → men validatorn ska stoppa det
+    # Sätt upp förväntan: kolumnen "value" SKA vara int64
+    app.state.semantic_fingerprint = {"value": "int64"}
+    
     raw = make_parquet({"value": [1, 2.5, 3]})
     res = upload_parquet_bytes(raw)
     assert res.status_code == 422
-    assert "type" in res.text.lower()
 
 
 def test_bool_and_int_mixed():

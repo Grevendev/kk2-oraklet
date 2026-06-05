@@ -40,10 +40,13 @@ def upload_parquet_bytes(raw: bytes):
 
 
 def test_mixed_numeric_and_string():
-    # Vi skickar inte med force_strings=True, så pa.table(data) 
-    # kommer att kasta ArrowInvalid inuti din applikation!
+    # 1. Förbered statet så att appen tror att "temp" är numerisk
+    app.state.semantic_fingerprint = {"temp": "int64"} 
+    
+    # 2. Kör uppladdningen
     raw = make_parquet({"temp": [10, "hej", 12]}, force_strings=False)
     res = upload_parquet_bytes(raw)
+    
     assert res.status_code == 422
 
 

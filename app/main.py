@@ -334,7 +334,24 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
             col_str = str(col).strip()
             if col is None or col_str in ["None", "", "nan", "null"] or "unnamed" in col_str.lower():
                 raise ValidationError("Invalid file format: Column name cannot be null or empty.")
-
+        # Strikt numerisk validering för kända numeriska kolumner
+        import pandas as pd
+        for col in df.columns:
+            normalized_col = unicodedata.normalize("NFC", str(col))
+            
+            # Kolla enbart om vi har ett etablerat fingeravtryck som säger att det är numeriskt
+            semantic_type = state.semantic_fingerprint.get(normalized_col)
+            
+            # Vi definierar vad som räknas som numeriskt i vårt system
+            known_numeric_types = ["int64", "float64", "int", "float", "str:numeric"]
+            
+            if semantic_type in known_numeric_types:
+                try:
+                    # Vi försöker konvertera - om det är numeriskt fingeravtryck men innehåller "hej",
+                    # så kommer to_numeric att kasta ValueError/TypeError
+                    pd.to_numeric(df[col], errors='raise')
+                except (ValueError, TypeError):
+                    raise ValidationError(f"Column {col} is registered as numeric but contains invalid non-numeric data.")
     except (ValidationError, pa.ArrowInvalid, ValueError, TypeError, AssertionError) as e:
         GLOBAL_CIRCUIT_BREAKER.after_failure()
         record_validation_failure()

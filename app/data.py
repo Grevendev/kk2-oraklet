@@ -165,118 +165,48 @@ class DataService:
     # PARQUET VALIDATOR
     # ---------------------------------------------------------
     def validate_and_clean_parquet(self, file_bytes: bytes) -> pd.DataFrame:
+        if not file_bytes or len(file_bytes) < 4 or file_bytes[:4] != b"PAR1":
+            raise ValidationError("Invalid Parquet file.")
+
         try:
-            if not file_bytes or len(file_bytes) < 4:
-                raise ValidationError("Invalid Parquet file: too small.")
-
-            if file_bytes[:4] != b"PAR1":
-                raise ValidationError("Invalid Parquet magic bytes.")
-
-            parquet_file = pq.ParquetFile(pa.BufferReader(file_bytes))
-            schema = parquet_file.schema_arrow
-            names = schema.names
-
-            if any(n is None or str(n).strip() in ["", "None"] for n in names):
-                raise ValidationError("Empty or null column name.")
-
-            if len(names) != len(set(names)):
+            # Läs med schema-framtvingning om möjligt
+            table = pq.read_table(pa.BufferReader(file_bytes))
+            
+            if len(table.column_names) != len(set(table.column_names)):
                 raise ValidationError("Duplicate columns detected.")
-
-            table = parquet_file.read()
-
-            # Mixed int/float detection BEFORE pandas
-            for col_idx in range(table.num_columns):
-                column = table.column(col_idx)
-
-                seen_int = False
-                seen_float = False
-
-                for chunk in column.chunks:
-                    arrow_type = chunk.type
-
-                    if pa.types.is_integer(arrow_type):
-                        seen_int = True
-                    elif pa.types.is_floating(arrow_type):
-                        seen_float = True
-
-                    if seen_int and seen_float:
-                        raise ValidationError("Mixed int and float values.")
 
             df = table.to_pandas()
 
-            # Mixed int/float AFTER pandas
+            # Hämta förväntat schema från state om det finns
+            from app.main import app
+            fingerprint = getattr(app.state, "semantic_fingerprint", {})
+
             for col in df.columns:
-                s = df[col]
-
-                if pd.api.types.is_float_dtype(s):
-                    non_null = s.dropna()
-                    if non_null.empty:
-                        continue
-
-                    is_int_like = non_null.apply(lambda v: float(v).is_integer())
-                    if is_int_like.any() and (~is_int_like).any():
-                        raise ValidationError("Mixed int and float values.")
-
-            # Column cleanup + normalization
-            cleaned = []
-            for col in df.columns:
-                col_str = str(col).strip()
-                if col is None or col_str in ["", "None"]:
-                    raise ValidationError("Empty or null column name.")
-                cleaned.append(col_str)
-                
-            df.columns = cleaned
-            df.columns = [self._normalize(col) for col in df.columns]
-
-            # Nested list inconsistent types
-            for col in df.columns:
-                s = df[col]
-                if s.apply(lambda x: isinstance(x, (list,))).any():
-                    has_numeric_like = False
-                    has_non_numeric = False
-
-                    def is_numeric_like(v):
-                        try:
-                            float(v)
-                            return True
-                        except:
-                            return False
-                    
-                    for v in s:
-                        if isinstance(v, list):
-                            for item in v:
-                                if is_numeric_like(item):
-                                    has_numeric_like = True
-                                else:
-                                    has_non_numeric = True
-
-                                if has_numeric_like and has_non_numeric:
-                                    raise ValidationError("Nested list contains mixed types.")
-
-            # Mixed numeric + string
-            for col in df.columns:
-                s = df[col]
-                if s.apply(lambda x: isinstance(x, (int, float))).any() and \
-                   s.apply(lambda x: isinstance(x, str)).any():
-                    raise ValidationError("Mixed numeric and string values.")
-
-            # Bool + int → promote to int
-            for col in df.columns:
-                s = df[col]
-                if s.apply(lambda x: isinstance(x, bool)).any() and \
-                   s.apply(lambda x: isinstance(x, int)).any():
-                    df[col] = s.astype(int)
-
-            # Nullability check
-            for col in df.columns:
-                if df[col].isna().all():
+                # 1. Null-koll
+                if df[col].isnull().all():
                     raise ValidationError(f"Column '{col}' contains only null values.")
 
-            return df
+                # 2. Om vi har ett fingerprint, validera typen
+                if col in fingerprint:
+                    expected = fingerprint[col]
+                    # Enkel check: om förväntat är numeriskt men vi har objekt/strängar
+                    if "int" in expected or "float" in expected:
+                        if not pd.api.types.is_numeric_dtype(df[col]):
+                            raise ValidationError(f"Type conflict: {col} expected {expected}")
 
-        except ValidationError as e:
-            GLOBAL_CIRCUIT_BREAKER.after_failure()
-            raise
+                # 3. Aggressiv blandad-typ-kontroll
+                # Om kolumnen är object men innehåller både strängar och siffror
+                if df[col].dtype == object:
+                    types = {type(x) for x in df[col].dropna()}
+                    if len(types) > 1 and any(isinstance(x, str) for x in df[col].dropna()):
+                        raise ValidationError(f"Mixed types detected in {col}")
+
+            return df
+        except Exception as e:
+            # Om vi redan kastat ValidationError, skicka vidare
+            if isinstance(e, ValidationError):
+                raise
+            raise ValidationError(str(e))
 
 # ============================================================
 # CSV VALIDATOR (unchanged)

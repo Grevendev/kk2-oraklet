@@ -339,12 +339,16 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
     except (ValidationError, pa.ArrowInvalid, ValueError, TypeError, AssertionError) as e:
         GLOBAL_CIRCUIT_BREAKER.after_failure()
         record_validation_failure()
-        # Kasta ValidationError för att trigga din validation_error_handler
-        raise ValidationError(str(e))
+        
+        # VIKTIGT: Returnera här så att 200 OK-svaret i slutet inte körs
+        return JSONResponse(
+            status_code=422,
+            content={"error_type": "ValidationError", "message": str(e)}
+        )
         
     except UserError as ue:
         if getattr(state, "schema_drift_blocking", False):
-            # UserError fångas av user_error_handler
+            # Här kastar du för att din globala exception handler ska fånga det (t.ex. som 400)
             raise ue 
         else:
             import pyarrow.parquet as pq

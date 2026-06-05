@@ -69,3 +69,14 @@ build/
 dist/
 *.egg-info/
 *.egg
+
+
+# Frontend dependencies
+frontend/node_modules/
+frontend/dist/
+
+# Lokala miljövariabler och cache för frontend
+frontend/.env.local
+frontend/.env.*.local
+frontend/.local
+frontend/.eslintcache

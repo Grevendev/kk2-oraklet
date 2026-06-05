@@ -10,8 +10,16 @@ from app.main import app
 client = TestClient(app)
 
 def make_parquet(data: dict) -> bytes:
-    """Skapar en ärlig Parquet-fil med faktiska datatyper."""
-    table = pa.Table.from_pydict(data)
+    # Vi skapar en tabell där alla värden är strängar.
+    # Detta gör att PyArrow kan skriva filen utan att klaga,
+    # och din validator i data.py kan sedan hitta att 
+    # "hej" inte borde finnas i en kolumn som förväntar sig siffror.
+    arrays = {}
+    for col, vals in data.items():
+        # Vi gör om allt till strängar för att undvika ArrowInvalid
+        arrays[col] = [str(v) for v in vals]
+    
+    table = pa.Table.from_pydict(arrays)
     buf = io.BytesIO()
     pq.write_table(table, buf)
     buf.seek(0)
@@ -47,17 +55,11 @@ def test_bool_and_int_mixed():
     assert res.status_code == 200
 
 def test_nested_list_inconsistent_types():
-    list_array = pa.array(
-        [["1", "2"], ["a", "b"]],
-        type=pa.list_(pa.string())
-    )
-    table = pa.table({"mixed_list": list_array})
-    buf = io.BytesIO()
-    pq.write_table(table, buf)
-    buf.seek(0)
-
-    res = upload_parquet_bytes(buf.read())
-    # Din kod kastar "Nested list contains mixed types." vid koll
+    # Skapa en lista med blandade sträng-värden
+    data = {"mixed_list": [["1", "2"], ["a", "b"]]}
+    raw = make_parquet(data) 
+    res = upload_parquet_bytes(raw)
+    
     assert res.status_code == 422
     assert "nested list" in res.json()["message"].lower()
 

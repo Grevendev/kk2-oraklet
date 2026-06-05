@@ -381,7 +381,7 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
                 existing_schema[norm_col] = dt_str
             
             if current_schema != existing_schema:
-                raise HTTPException(status_code=400, detail="Schema lineage and drift detected")
+                raise UserError("Schema lineage and drift detected")
 
         if getattr(state, "semantic_drift_blocking", False):
             # --- SEMANTISK DRIFT ---

@@ -266,13 +266,6 @@ async def pipeline_error_handler(request, exc: PipelineError):
 def health_check():
     return {"status": "ok"}
 
-
-
-
-
-# -----------------------------------
-# UPLOAD ENDPOINT
-# -----------------------------------
 # -----------------------------------
 # UPLOAD ENDPOINT
 # -----------------------------------
@@ -312,9 +305,6 @@ async def upload_data(request: Request, file: UploadFile = File(...)):
 
     file_bytes = await file.read()
 
-    # ---------------------------------------------------------
-    # 2. CSV/Parquet validering → ticka CB vid valideringsfel
-    # ---------------------------------------------------------
     # ---------------------------------------------------------
     # 2. CSV/Parquet validering → ticka CB vid valideringsfel
     # ---------------------------------------------------------

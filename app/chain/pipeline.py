@@ -9,7 +9,7 @@ from app.chain.steps import (
     LLMRunner,
     ResponseParser,
     PromptBuilderInput,
-    GLOBAL_CIRCUIT_BREAKER,   # ⭐ Lägg till denna import
+    GLOBAL_CIRCUIT_BREAKER,   
 )
 from app.state import state
 
@@ -29,7 +29,7 @@ class OrakletPipeline:
             ResponseParser(),
         ])
 
-        # ⭐ Detta är fixen som testet kräver:
+        
         # Testet förväntar sig att pipeline har en .circuit property.
         self.circuit = GLOBAL_CIRCUIT_BREAKER
 

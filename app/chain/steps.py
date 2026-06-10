@@ -72,6 +72,11 @@ GLOBAL_CIRCUIT_BREAKER = FixedCircuitBreaker()
 # Step 1 — PromptBuilder
 # ============================================================
 
+# Ändra Pydantic-modellen så den kan hantera strukturerad data
+class PromptBuilderOutput(BaseModel):
+    messages: list  # Ändrat från prompt: str
+
+
 class PromptBuilder(PipelineStep[PromptBuilderInput, PromptBuilderOutput]):
 
     def invoke(self, input: PromptBuilderInput) -> PromptBuilderOutput:
@@ -80,21 +85,24 @@ class PromptBuilder(PipelineStep[PromptBuilderInput, PromptBuilderOutput]):
         if not input.stats:
             raise ValueError("PromptBuilder received empty statistics.")
 
-        stats_section = f"Dataset statistics:\n{input.stats}"
+        # Skapa ett rent och standardiserat meddelandeformat (OpenAI-stil)
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    f"{SYSTEM_PROMPT}\n\n"
+                    f"Du måste svara på tydlig och kortfattad svenska.\n"
+                    f"Här är statistik om det uppladdade datasetet som du ska basera ditt svar på:\n"
+                    f"{input.stats}"
+                )
+            },
+            {
+                "role": "user",
+                "content": f"Berätta om datasetet utifrån statistiken. Svara på svenska."
+            }
+        ]
 
-        # Använd strikt ChatML-format som SmolLM2 förväntar sig för instruktionsföljsamhet
-        full_prompt = (
-            f"<|im_start|>system\n{SYSTEM_PROMPT}\n"
-            f"Svara alltid på tydlig och kortfattad svenska.\n"
-            f"{stats_section}<|im_end|>\n"
-            f"<|im_start|>user\n{input.question}<|im_end|>\n"
-            f"<|im_start|>assistant\n"
-        )
-
-        if len(full_prompt) > MAX_PROMPT_LENGTH:
-            raise ValueError("Prompt too long.")
-
-        return PromptBuilderOutput(prompt=full_prompt)
+        return PromptBuilderOutput(messages=messages)
 
 
 # ============================================================
@@ -134,16 +142,24 @@ class LLMRunner(PipelineStep[PromptBuilderOutput, LLMRunnerOutput]):
                     )
         return cls._pipeline
 
-    async def _run_model_async(self, prompt: str):
+    async def _run_model_async(self, messages: list):  # Ändrad signatur
         generator = self._get_pipeline()
+        tokenizer = generator.tokenizer
+
+        # Applicera modellens officiella chat-mall (lägger till rätt <|im_start|> automatiskt)
+        prompt = tokenizer.apply_chat_template(
+            messages, 
+            tokenize=False, 
+            add_generation_prompt=True
+        )
 
         def run_sync():
             return generator(
                 prompt,
                 max_new_tokens=80,
-                temperature=0.2,
+                temperature=0.1,  # Sänkt för mer strikt och exakt svar
                 do_sample=False,
-                eos_token_id=0,  # Stoppa genereringen vid end-of-sequence
+                eos_token_id=tokenizer.eos_token_id,  # Bryt direkt när modellen är klar
             )
 
         with anyio.move_on_after(LLM_TIMEOUT_SECONDS) as scope:
@@ -153,6 +169,9 @@ class LLMRunner(PipelineStep[PromptBuilderOutput, LLMRunnerOutput]):
             raise TimeoutError("LLM timed out")
 
         return result
+
+    # Kom ihåg att uppdatera anropet i din `invoke`-metod i LLMRunner:
+    # result = anyio.from_thread.run(self._run_model_async, input.messages)
 
     async def _run_fallback_async(self, prompt: str):
         return {

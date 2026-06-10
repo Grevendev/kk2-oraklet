@@ -50,8 +50,11 @@ export const useAI = () => {
       const data: AIResponse = await response.json();
       setChatHistory((prev) => [...prev, data]);
       return data;
-    } catch (err: any) {
-      setError(err.message || 'Ett fel uppstod vid AI-anropet.');
+    } catch (err: unknown) {
+      // Typ-assertion för att säkert komma åt .message
+      const error = err as { message?: string; };
+
+      setError(error.message || 'Ett fel uppstod vid AI-anropet.');
       throw err;
     } finally {
       setLoading(false);

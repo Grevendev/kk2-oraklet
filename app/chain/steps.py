@@ -79,26 +79,48 @@ class PromptBuilderOutput(BaseModel):
 
 class PromptBuilder(PipelineStep[PromptBuilderInput, PromptBuilderOutput]):
 
+    def _format_stats(self, stats: Dict[str, Any]) -> str:
+        """
+        Omvandlar rå describe()-JSON till en ren, textbaserad tabell/lista
+        som en liten språkmodell lätt kan förstå och resonera kring.
+        """
+        lines = []
+        for column, metrics in stats.items():
+            lines.append(f"Kolumn: {column}")
+            if isinstance(metrics, dict):
+                for metric_name, value in metrics.items():
+                    # Avrunda flyttal för att göra det mer läsbart för modellen
+                    if isinstance(value, float):
+                        value = round(value, 2)
+                    lines.append(f"  - {metric_name}: {value}")
+            else:
+                lines.append(f"  - {metrics}")
+        return "\n".join(lines)
+
     def invoke(self, input: PromptBuilderInput) -> PromptBuilderOutput:
         logger.info("PromptBuilder invoked")
 
         if not input.stats:
             raise ValueError("PromptBuilder received empty statistics.")
 
-        # Skapa ett rent och standardiserat meddelandeformat (OpenAI-stil)
+        # Transformera statistiken till ren text
+        readable_stats = self._format_stats(input.stats)
+
+        # Skapa meddelandestrukturen med den tvättade statistiken
         messages = [
             {
                 "role": "system",
                 "content": (
                     f"{SYSTEM_PROMPT}\n\n"
-                    f"Du måste svara på tydlig och kortfattad svenska.\n"
-                    f"Här är statistik om det uppladdade datasetet som du ska basera ditt svar på:\n"
-                    f"{input.stats}"
+                    f"Du är en hjälpsam AI-dataanalytiker. Du måste svara på tydlig, naturlig och kortfattad svenska.\n"
+                    f"Här är statistisk data från det uppladdade datasetet:\n"
+                    f"{readable_stats}\n\n"
+                    f"Viktigt: Svara som en människa på löpande text. Upprepa inte råa JSON-parenteser eller programmeringskod i ditt svar."
                 )
             },
             {
                 "role": "user",
-                "content": f"Berätta om datasetet utifrån statistiken. Svara på svenska."
+                "content": f"Berätta om datasetet utifrån denna statistik. Vad ser du?"
             }
         ]
 

@@ -1,3 +1,11 @@
+export interface ColumnMetrics {
+  mean: number;
+  min: number;
+  max: number;
+  std?: number; // Valfria extrafält
+  [key: string]: number | undefined;
+}
+
 export interface UploadResponse {
   rows: number;
   columns: string[];
@@ -5,7 +13,7 @@ export interface UploadResponse {
 }
 
 export interface StatsResponse {
-  stats: Record<string, any>;
+  stats: Record<string, ColumnMetrics>;
 }
 
 export interface AIResponse {

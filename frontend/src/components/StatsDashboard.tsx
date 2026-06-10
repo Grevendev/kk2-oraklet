@@ -28,13 +28,13 @@ export const StatsDashboard: React.FC = () => {
     const rawStats = statsData?.stats || {};
 
     return Object.entries(rawStats)
-      // Filtrera bort kolumner som inte har numerisk statistik (t.ex. textkolumner)
-      .filter(([_, metrics]: [string, any]) => metrics && typeof metrics.mean === 'number')
-      .map(([columnName, metrics]: [string, any]) => ({
+      // Ändra här: 'metrics' är nu automatiskt av typen ColumnMetrics
+      .filter(([_, metrics]) => metrics && typeof metrics.mean === 'number')
+      .map(([columnName, metrics]) => ({
         name: columnName,
-        "Medelvärde": Number(metrics.mean?.toFixed(2)),
-        "Min": Number(metrics.min?.toFixed(2)),
-        "Max": Number(metrics.max?.toFixed(2))
+        "Medelvärde": Number(metrics.mean.toFixed(2)),
+        "Min": Number(metrics.min.toFixed(2)),
+        "Max": Number(metrics.max.toFixed(2))
       }));
   }, [statsData]);
 

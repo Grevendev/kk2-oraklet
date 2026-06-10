@@ -1,0 +1,45 @@
+name: Oraklet CI Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      # 1. Setup Python & uv
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+        
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      
+      - name: Sync Backend Dependencies
+        run: uv sync # Detta sköter allt baserat på din pyproject.toml
+        
+      - name: Run Python Tests (via uv)
+        run: uv run pytest tests/
+        
+      # 2. Setup Node.js för frontend
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          
+      - name: Install Frontend Dependencies
+        run: cd frontend && npm install
+        
+      - name: Run Frontend Tests
+        run: cd frontend && npm test
+        
+      # 3. Byggprojektet
+      - name: Build Frontend
+        run: cd frontend && npm run build

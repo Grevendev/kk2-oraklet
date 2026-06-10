@@ -29,7 +29,6 @@ class OrakletPipeline:
             ResponseParser(),
         ])
 
-        
         # Testet förväntar sig att pipeline har en .circuit property.
         self.circuit = GLOBAL_CIRCUIT_BREAKER
 
@@ -62,5 +61,5 @@ class OrakletPipeline:
         return parsed
 
 
-# Global pipeline-instans (om du vill använda den direkt)
+# Global pipeline-instans
 pipeline = OrakletPipeline()

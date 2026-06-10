@@ -3,12 +3,12 @@
 import hashlib
 import os
 from typing import Dict, Tuple, AsyncGenerator
+from datetime import datetime, timedelta
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import JSONResponse, StreamingResponse, Response
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
-from fastapi import HTTPException
 
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -21,11 +21,16 @@ from app.chain.errors import PipelineError
 from app.schemas import AIResponse
 from app.chain.steps import PromptBuilderInput, GLOBAL_CIRCUIT_BREAKER
 from app.chain.pipeline import OrakletPipeline
-from datetime import datetime, timedelta
 
-pipeline = None
-
+# Kontrollera om appen körs i testläge (pytest)
 IS_PYTEST = os.getenv("TESTING") == "1"
+
+# Dynamisk instansiering beroende på miljö
+if IS_PYTEST:
+    pipeline = None
+else:
+    # Här väcks motorn till liv i skarpt läge!
+    pipeline = OrakletPipeline()
 
 router = APIRouter(prefix="/ai", tags=["AI"])
 

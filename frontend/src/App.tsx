@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { DataUploader } from './components/DataUploader';
 import { StatsDashboard } from './components/StatsDashboard';
 import { AIChat } from './components/AIChat';

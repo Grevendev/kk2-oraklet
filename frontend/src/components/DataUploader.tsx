@@ -1,16 +1,19 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { dataApi } from '../api/endpoints';
 import { UploadResponse } from '../types';
 
 interface DataUploaderProps {
   onUploadSuccess: (data: UploadResponse) => void;
+  onFileReset: () => void;
 }
 
-export const DataUploader: React.FC<DataUploaderProps> = ({ onUploadSuccess }) => {
+// FIX: Lagt till onFileReset här i props-destruktureringen
+export const DataUploader: React.FC<DataUploaderProps> = ({ onUploadSuccess, onFileReset }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Nytt state för att hålla reda på den framgångsrikt uppladdade filen
   const [uploadedFile, setUploadedFile] = useState<{ name: string; size: number; } | null>(null);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -25,7 +28,6 @@ export const DataUploader: React.FC<DataUploaderProps> = ({ onUploadSuccess }) =
 
     try {
       const response = await dataApi.upload(file);
-      // Spara filens metadata vid framgång för det nya UI-läget
       setUploadedFile({ name: file.name, size: file.size });
       onUploadSuccess(response);
     } catch (err: any) {
@@ -41,11 +43,16 @@ export const DataUploader: React.FC<DataUploaderProps> = ({ onUploadSuccess }) =
     }
   };
 
-  // Funktion för att nollställa uppladdningsvyn och tillåta en ny fil
   const handleClearFile = (e: React.MouseEvent) => {
     e.preventDefault();
-    e.stopPropagation(); // Förhindrar att filväljaren öppnas när man klickar på krysset
-    setUploadedFile(null);
+    e.stopPropagation();
+
+    setUploadedFile(null); // Rensade även bort den dubbla raden härifrån
+    onFileReset();
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   };
 
   return (
@@ -104,6 +111,7 @@ export const DataUploader: React.FC<DataUploaderProps> = ({ onUploadSuccess }) =
       >
         {/* Det osynliga fil-inputet */}
         <input
+          ref={fileInputRef}
           type="file"
           accept=".csv,.parquet"
           onChange={handleFileChange}
@@ -197,7 +205,7 @@ export const DataUploader: React.FC<DataUploaderProps> = ({ onUploadSuccess }) =
             </button>
           </div>
         ) : (
-          /* UTGÅNGSLÄGET (Helt orört från din originalkod) */
+          /* UTGÅNGSLÄGET */
           <div style={{ textAlign: 'center' }}>
             <div style={{ fontSize: '28px', marginBottom: '12px', opacity: 0.7 }}>
               📁

@@ -14,6 +14,10 @@ export const DataUploader: React.FC<DataUploaderProps> = ({ onUploadSuccess }) =
     const file = event.target.files?.[0];
     if (!file) return;
 
+    await uploadFile(file);
+  };
+
+  const uploadFile = async (file: File) => {
     setLoading(true);
     setError(null);
 
@@ -21,32 +25,119 @@ export const DataUploader: React.FC<DataUploaderProps> = ({ onUploadSuccess }) =
       const response = await dataApi.upload(file);
       onUploadSuccess(response);
     } catch (err: any) {
-      // Här fångar vi upp dina anpassade felmeddelanden från FastAPI
-      const backendMessage = err.response?.data?.message || 'Ett oväntat fel uppstod vid valideringen.';
-      setError(backendMessage);
+      // Slå ihop felhanteringen i ett och samma catch-block
+      if (err.response?.data?.message) {
+        setError(err.response.data.message);
+      } else if (err.message) {
+        setError(err.message);
+      } else {
+        setError('Anslutningsfel mot valideringsklustret eller oväntat valideringsfel.');
+      }
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div style={{ padding: '20px', border: '1px solid #ccc', borderRadius: '8px', background: '#fff', marginBottom: '20px' }}>
-      <h2 style={{ marginTop: 0, color: '#333' }}>1. Ladda upp dataset</h2>
-      <p style={{ color: '#666', fontSize: '14px' }}>Stöder `.csv` och `.parquet`. Systemet kör automatisk schema- och semantisk driftkontroll.</p>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      {/* Titel & Beskrivning */}
+      <div style={{ marginBottom: '20px' }}>
+        <h2 style={{
+          marginTop: 0,
+          fontSize: '20px',
+          fontWeight: 600,
+          letterSpacing: '-0.02em',
+          color: '#f8fafc'
+        }}>
+          1. Data Ingestion Stream
+        </h2>
+        <p style={{ color: '#64748b', fontSize: '13px', lineHeight: '1.5', margin: 0 }}>
+          Stöder <span style={{ fontFamily: 'monospace', color: '#a855f7' }}>.csv</span> och <span style={{ fontFamily: 'monospace', color: '#a855f7' }}>.parquet</span>. Systemet kör automatisk schema- och semantisk driftkontroll.
+        </p>
+      </div>
 
-      <input
-        type="file"
-        accept=".csv,.parquet"
-        onChange={handleFileChange}
-        disabled={loading}
-        style={{ marginTop: '10px' }}
-      />
+      {/* Premium Dropzone Labellager */}
+      <label
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '40px 20px',
+          background: loading ? '#0f172a' : 'rgba(255, 255, 255, 0.01)',
+          border: loading ? '2px dashed rgba(168, 85, 247, 0.2)' : '2px dashed rgba(255, 255, 255, 0.1)',
+          borderRadius: '12px',
+          cursor: loading ? 'not-allowed' : 'pointer',
+          transition: 'all 0.2s ease',
+          boxShadow: 'inset 0 2px 4px rgba(0, 0, 0, 0.4)'
+        }}
+        onMouseEnter={(e) => {
+          if (!loading) {
+            e.currentTarget.style.borderColor = 'rgba(168, 85, 247, 0.4)'; // Subtil lila glöd
+            e.currentTarget.style.background = 'rgba(168, 85, 247, 0.02)';
+          }
+        }}
+        onMouseLeave={(e) => {
+          if (!loading) {
+            e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.01)';
+          }
+        }}
+      >
+        {/* Det osynliga fil-inputet */}
+        <input
+          type="file"
+          accept=".csv,.parquet"
+          onChange={handleFileChange}
+          disabled={loading}
+          style={{ display: 'none' }} // Helt dolt för att rensa bort webbläsarens default-look
+        />
 
-      {loading && <p style={{ color: '#0070f3' }}>Kör defensiv datavalidering...</p>}
+        {/* Dynamiskt UI-innehåll baserat på status */}
+        {loading ? (
+          <div style={{ textAlign: 'center' }}>
+            <div style={{
+              fontSize: '24px',
+              marginBottom: '12px',
+              animation: 'pulse 1.5s infinite ease-in-out'
+            }}>
+              ⚙️
+            </div>
+            <div style={{ fontSize: '14px', fontWeight: 600, color: '#a855f7', marginBottom: '4px' }}>
+              Kör defensiv datavalidering...
+            </div>
+            <div style={{ fontSize: '12px', color: '#475569', fontFamily: 'monospace' }}>
+              PARSING_SCHEMA_MATRICES
+            </div>
+          </div>
+        ) : (
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: '28px', marginBottom: '12px', opacity: 0.7 }}>
+              📁
+            </div>
+            <div style={{ fontSize: '14px', fontWeight: 600, color: '#e2e8f0', marginBottom: '4px' }}>
+              Välj eller släpp din datafil här
+            </div>
+            <div style={{ fontSize: '12px', color: '#64748b' }}>
+              Klicka för att bläddra på din hårddisk
+            </div>
+          </div>
+        )}
+      </label>
 
+      {/* Sofistikerat Injusteringsfel (Röd alert-box matching) */}
       {error && (
-        <div style={{ marginTop: '15px', padding: '10px', background: '#fee2e2', color: '#991b1b', borderRadius: '4px', fontSize: '14px' }}>
-          <strong>Injusteringsfel:</strong> {error}
+        <div style={{
+          marginTop: '20px',
+          padding: '14px 16px',
+          background: 'rgba(239, 68, 68, 0.07)',
+          color: '#fca5a5',
+          border: '1px solid rgba(239, 68, 68, 0.2)',
+          borderRadius: '10px',
+          fontSize: '13px',
+          lineHeight: '1.5'
+        }}>
+          <strong>⚠️ Injusteringsfel:</strong> {error}
         </div>
       )}
     </div>

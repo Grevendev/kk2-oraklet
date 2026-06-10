@@ -11,19 +11,19 @@ export default function App() {
   return (
     <div style={{
       fontFamily: 'system-ui, -apple-system, sans-serif',
-      background: '#f8fafc',
+      background: '#0d9ea1',
       minHeight: '100vh',
-      color: '#0f172a',
+      color: '#193370',
       padding: '40px 20px'
     }}>
       <div style={{ maxWidth: '1000px', margin: '0 auto' }}>
 
         {/* Header */}
-        <header style={{ marginBottom: '40px', borderBottom: '1px solid #e2e8f0', paddingBottom: '20px' }}>
-          <h1 style={{ fontSize: '32px', fontWeight: 800, margin: '0 0 8px 0', color: '#1e293b' }}>
+        <header style={{ marginBottom: '40px', borderBottom: '1px solid #022553', paddingBottom: '20px' }}>
+          <h1 style={{ fontSize: '32px', fontWeight: 800, margin: '0 0 8px 0', color: '#022553' }}>
             Oraklet
           </h1>
-          <p style={{ fontSize: '16px', color: '#64748b', margin: 0 }}>
+          <p style={{ fontSize: '25px', color: '#022553', margin: 0 }}>
             Enterprise-Grade Data & AI Processing Platform
           </p>
         </header>

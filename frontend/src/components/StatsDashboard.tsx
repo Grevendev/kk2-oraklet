@@ -31,8 +31,8 @@ export const StatsDashboard: React.FC = () => {
         disabled={loading}
         style={{
           padding: '8px 16px',
-          background: '#0070f3',
-          color: '#fff',
+          background: '#022553',
+          color: '#4388e1',
           border: 'none',
           borderRadius: '4px',
           cursor: 'pointer'

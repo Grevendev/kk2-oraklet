@@ -188,7 +188,7 @@ class LLMRunner(PipelineStep[PromptBuilderOutput, LLMRunnerOutput]):
                 # Behåll straffavgiften så att den inte fastnar i upprepningar
                 repetition_penalty=1.2, 
                 
-                eos_token_id=tokenizer.eos_token_id,
+                eos_token_id=[tokenizer.eos_token_id, tokenizer.encode(".")[0]],
             )
 
         with anyio.move_on_after(LLM_TIMEOUT_SECONDS) as scope:

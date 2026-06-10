@@ -20,9 +20,9 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Sync Backend Dependencies
+      - name: Sync Backend
         run: uv sync
-      - name: Run Python Tests (via uv)
+      - name: Run Python Tests
         run: uv run pytest tests/
         
       # 2. Frontend (Node/Vite)
@@ -30,14 +30,22 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: 'npm' # Automatiskt caching av npm-paket!
+          cache-dependency-path: frontend/package-lock.json
+
       - name: Install Frontend Dependencies
         run: cd frontend && npm install
+        
+      - name: Lint Frontend
+        run: cd frontend && npm run lint # Nytt: Säkerställer kodkvalitet
+        
       - name: Run Frontend Tests
         run: cd frontend && npm test
+        
       - name: Build Frontend
         run: cd frontend && npm run build
         
-      # 3. Artifacts (Vite använder dist/)
+      # 3. Artifacts
       - name: Upload Frontend Artifact
         uses: actions/upload-artifact@v4
         with:

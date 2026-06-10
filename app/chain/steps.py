@@ -179,9 +179,17 @@ class LLMRunner(PipelineStep[PromptBuilderOutput, LLMRunnerOutput]):
             return generator(
                 prompt,
                 max_new_tokens=80,
-                temperature=0.1,  # Sänkt för mer strikt och exakt svar
-                do_sample=False,
-                eos_token_id=tokenizer.eos_token_id,  # Bryt direkt när modellen är klar
+                
+                # Slå på kontrollerad sampling istället för strikt "greedy" sökning
+                do_sample=True,     
+                temperature=0.3,     # Låg temperatur håller den till fakta...
+                top_k=40,            # ...men begränsar urvalet till de 40 bästa orden
+                top_p=0.85,          # Tar bort osannolika "svans-ord"
+                
+                # Straffa upprepningar hårt (1.0 = inget straff, > 1.0 = straff)
+                repetition_penalty=1.25, 
+                
+                eos_token_id=tokenizer.eos_token_id,
             )
 
         with anyio.move_on_after(LLM_TIMEOUT_SECONDS) as scope:

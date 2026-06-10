@@ -15,8 +15,11 @@ export const StatsDashboard: React.FC = () => {
     try {
       const data = await dataApi.getStats();
       setStatsData(data);
-    } catch (err: any) {
-      const backendMessage = err.response?.data?.message || 'Kunde inte hämta statistik. Har du laddat upp ett dataset?';
+    } catch (err: unknown) {
+      // Vi castar err till en struktur som förväntas vid API-anrop
+      const error = err as { response?: { data?: { message?: string; }; }; };
+
+      const backendMessage = error.response?.data?.message || 'Kunde inte hämta statistik. Har du laddat upp ett dataset?';
       setError(backendMessage);
     } finally {
       setLoading(false);
@@ -28,13 +31,14 @@ export const StatsDashboard: React.FC = () => {
     const rawStats = statsData?.stats || {};
 
     return Object.entries(rawStats)
-      // Filtrera bort kolumner som inte har numerisk statistik (t.ex. textkolumner)
-      .filter(([_, metrics]: [string, any]) => metrics && typeof metrics.mean === 'number')
-      .map(([columnName, metrics]: [string, any]) => ({
+      // Ändra här: 'metrics' är nu automatiskt av typen ColumnMetrics
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      .filter(([_key, metrics]) => metrics && typeof metrics.mean === 'number')
+      .map(([columnName, metrics]) => ({
         name: columnName,
-        "Medelvärde": Number(metrics.mean?.toFixed(2)),
-        "Min": Number(metrics.min?.toFixed(2)),
-        "Max": Number(metrics.max?.toFixed(2))
+        "Medelvärde": Number(metrics.mean.toFixed(2)),
+        "Min": Number(metrics.min.toFixed(2)),
+        "Max": Number(metrics.max.toFixed(2))
       }));
   }, [statsData]);
 

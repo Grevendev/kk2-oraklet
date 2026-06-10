@@ -12,10 +12,15 @@ class FakeLLMRunner(PipelineStep):
     """
 
     def invoke(self, input):
+        # input är nu en PromptBuilderOutput som innehåller .messages (en lista)
+        # Vi hämtar innehållet från det sista meddelandet som ett exempel
+        last_message = input.messages[-1]["content"] if input.messages else ""
+        
         return LLMRunnerOutput(
             raw_output=(
-                f"{input.prompt}\n\n"
-                "Answer: Detta är ett test-svar från FakeLLMRunner."
+                f"{last_message}\n\n"
+                "<|im_start|>assistant\n"
+                "Answer: Detta är ett test-svar från FakeLLMRunner.<|im_end|>"
             )
         )
 

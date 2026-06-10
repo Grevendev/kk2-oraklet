@@ -30,11 +30,14 @@ export const DataUploader: React.FC<DataUploaderProps> = ({ onUploadSuccess, onF
       const response = await dataApi.upload(file);
       setUploadedFile({ name: file.name, size: file.size });
       onUploadSuccess(response);
-    } catch (err: any) {
-      if (err.response?.data?.message) {
-        setError(err.response.data.message);
-      } else if (err.message) {
-        setError(err.message);
+    } catch (err: unknown) {
+      // Typ-vakt för att säkert hantera API-fel
+      const error = err as { response?: { data?: { message?: string; }; }; message?: string; };
+
+      if (error.response?.data?.message) {
+        setError(error.response.data.message);
+      } else if (error.message) {
+        setError(error.message);
       } else {
         setError('Anslutningsfel mot valideringsklustret eller oväntat valideringsfel.');
       }

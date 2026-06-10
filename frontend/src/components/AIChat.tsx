@@ -19,8 +19,12 @@ export const AIChat: React.FC = () => {
       const result = await dataApi.askAI(question);
       setChatHistory(prev => [result, ...prev]);
       setQuestion('');
-    } catch (err: any) {
-      const backendMessage = err.response?.data?.message || 'Kunde inte kommunicera med Oraklet.';
+    } catch (err: unknown) {
+      // Vi castar err till en struktur vi förväntar oss från Axios/API:et
+      const error = err as { response?: { data?: { message?: string; }; }; };
+
+      // Vi använder optional chaining (?.) för att säkert komma åt meddelandet
+      const backendMessage = error.response?.data?.message || 'Kunde inte kommunicera med Oraklet.';
       setError(backendMessage);
     } finally {
       setLoading(false);

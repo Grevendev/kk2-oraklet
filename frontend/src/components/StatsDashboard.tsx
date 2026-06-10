@@ -15,8 +15,11 @@ export const StatsDashboard: React.FC = () => {
     try {
       const data = await dataApi.getStats();
       setStatsData(data);
-    } catch (err: any) {
-      const backendMessage = err.response?.data?.message || 'Kunde inte hämta statistik. Har du laddat upp ett dataset?';
+    } catch (err: unknown) {
+      // Vi castar err till en struktur som förväntas vid API-anrop
+      const error = err as { response?: { data?: { message?: string; }; }; };
+
+      const backendMessage = error.response?.data?.message || 'Kunde inte hämta statistik. Har du laddat upp ett dataset?';
       setError(backendMessage);
     } finally {
       setLoading(false);

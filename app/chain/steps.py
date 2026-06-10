@@ -111,14 +111,14 @@ class PromptBuilder(PipelineStep[PromptBuilderInput, PromptBuilderOutput]):
             {
                 "role": "system",
                 "content": (
-                    "Du är en dataanalytiker som bara svarar på svenska.\n"
-                    "Analysera statistiken nedan och sammanfatta kort vad du ser.\n"
+                    "You are a precise data analyst tool.\n"
+                    "Analyze the following dataset statistics and provide a one-sentence summary of what the data contains.\n"
                     f"{readable_stats}"
                 )
             },
             {
                 "role": "user",
-                "content": "Berätta kort om datasetet på svenska."
+                "content": "Summarize this dataset in one clear sentence."
             }
         ]
 
@@ -173,8 +173,8 @@ class LLMRunner(PipelineStep[PromptBuilderOutput, LLMRunnerOutput]):
             add_generation_prompt=True
         )
         
-        # Tvinga modellen att starta sitt svar med en svensk mening!
-        prompt = f"{raw_prompt}Baserat på statistiken kan vi se att datasetet innehåller"
+        # Starta meningen perfekt på engelska
+        prompt = f"{raw_prompt}Based on the statistics, this dataset contains"
 
         def run_sync():
             return generator(
@@ -288,14 +288,20 @@ class ResponseParser(PipelineStep[LLMRunnerOutput, ResponseParserOutput]):
         # Rensa bort eventuella hängande ChatML-taggar från svaret
         answer = generated_part.replace("<|im_end|>", "").replace("<|im_start|>", "").strip()
 
-        # Fallback ifall modellen skulle råka producera tom text
-        # Snygga till så att den påbörjade meningen följer med i svaret
-        if not answer.startswith("Baserat på"):
-            answer = f"Baserat på statistiken kan vi se att datasetet innehåller {answer}"
+        # --- HÄR ÄR DEN NYA STRUKTURERINGEN ---
+        
+        # 1. Städa bort vår engelska pre-fill-start om modellen upprepade den
+        answer = answer.replace("Based on the statistics, this dataset contains", "").strip()
+        
+        # 2. Översätt de absolut vanligaste nyckelorden som den lilla engelska modellen spottar ur sig
+        answer = answer.replace("rows", "rader").replace("columns", "kolumner").replace("entries", "datapunkter")
+        
+        # 3. Paketera svaret i en snygg, svensk presentation till din frontend
+        final_answer = f"Baserat på statistiken kan vi se att datasetet innehåller {answer}"
 
         return ResponseParserOutput(
             question="(unknown — will be filled by /ai/ask endpoint)",
-            answer=answer,
+            answer=final_answer, # Skicka ut det lokaliserade svaret
             reasoning=reasoning,
             stats_used={},
             model=MODEL_NAME

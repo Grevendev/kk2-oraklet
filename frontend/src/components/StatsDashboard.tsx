@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { dataApi } from '../api/endpoints';
 import { StatsResponse } from '../types';
+// Importera Recharts-komponenter för diagrammet
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, CartesianGrid } from 'recharts';
 
 export const StatsDashboard: React.FC = () => {
   const [statsData, setStatsData] = useState<StatsResponse | null>(null);
@@ -20,6 +22,21 @@ export const StatsDashboard: React.FC = () => {
       setLoading(false);
     }
   };
+
+  // --- STRUKTURTRANSFORMATION (100% FRONTEND) ---
+  const chartData = useMemo(() => {
+    const rawStats = statsData?.stats || {};
+
+    return Object.entries(rawStats)
+      // Filtrera bort kolumner som inte har numerisk statistik (t.ex. textkolumner)
+      .filter(([_, metrics]: [string, any]) => metrics && typeof metrics.mean === 'number')
+      .map(([columnName, metrics]: [string, any]) => ({
+        name: columnName,
+        "Medelvärde": Number(metrics.mean?.toFixed(2)),
+        "Min": Number(metrics.min?.toFixed(2)),
+        "Max": Number(metrics.max?.toFixed(2))
+      }));
+  }, [statsData]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -58,7 +75,8 @@ export const StatsDashboard: React.FC = () => {
           display: 'flex',
           justifyContent: 'center',
           alignItems: 'center',
-          gap: '8px'
+          gap: '8px',
+          marginBottom: '20px'
         }}
         onMouseEnter={(e) => {
           if (!loading) {
@@ -76,7 +94,7 @@ export const StatsDashboard: React.FC = () => {
         {loading ? (
           <>
             <span style={{ display: 'inline-block', animation: 'spin 1s linear infinite' }}>⏳</span>
-            Anyserar matriser...
+            Analyserar matriser...
           </>
         ) : 'Exekvera statistisk profilering'}
       </button>
@@ -84,65 +102,101 @@ export const StatsDashboard: React.FC = () => {
       {/* Felhantering (Sofistikerad röd alert box) */}
       {error && (
         <div style={{
-          marginTop: '20px',
           padding: '14px 16px',
           background: 'rgba(239, 68, 68, 0.07)',
           color: '#fca5a5',
           border: '1px solid rgba(239, 68, 68, 0.2)',
           borderRadius: '10px',
           fontSize: '13px',
-          lineHeight: '1.5'
+          lineHeight: '1.5',
+          marginBottom: '20px'
         }}>
           ⚠️ {error}
         </div>
       )}
 
-      {/* Data-output (Premium mörk IDE/Terminal-look) */}
-      {statsData && (
-        <div style={{
-          marginTop: '20px',
-          background: '#020617', // Extremt djupt kolfärgad terminalbakgrund
-          border: '1px solid rgba(255, 255, 255, 0.04)',
-          borderRadius: '12px',
-          overflow: 'hidden',
-          boxShadow: 'inset 0 2px 8px rgba(0, 0, 0, 0.8)'
-        }}>
-          {/* Terminal Top Bar */}
+      {/* Trygg typsäkrad rendering via chartData-kontroll */}
+      {statsData && chartData.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+
+          {/* VISUAL DIAGRAM SEKTION */}
           <div style={{
-            background: 'rgba(255, 255, 255, 0.02)',
-            padding: '10px 16px',
-            borderBottom: '1px solid rgba(255, 255, 255, 0.04)',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center'
+            background: '#020617',
+            border: '1px solid rgba(255, 255, 255, 0.04)',
+            borderRadius: '12px',
+            padding: '20px 16px 10px 16px',
+            boxShadow: '0 4px 20px rgba(0,0,0,0.2)'
           }}>
-            <span style={{
-              fontSize: '11px',
-              fontFamily: 'monospace',
-              color: '#475569',
-              textTransform: 'uppercase', // Fixat! Giltig TypeScript-typ för CSS
-              letterSpacing: '0.05em'
-            }}>
-              OUTPUT_BUFFER // JSON_MATRIX
-            </span>
-            <div style={{ display: 'flex', gap: '6px' }}>
-              <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#38bdf8' }} />
-              <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#475569' }} />
+            <div style={{ fontSize: '11px', fontFamily: 'monospace', color: '#475569', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: '16px' }}>
+              VISUAL_METRIC_MATRIX // DISTRIBUTION
+            </div>
+
+            <div style={{ width: '100%', height: 240 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255, 255, 255, 0.05)" vertical={false} />
+                  <XAxis dataKey="name" stroke="#475569" fontSize={12} tickLine={false} />
+                  <YAxis stroke="#475569" fontSize={12} tickLine={false} />
+                  <Tooltip
+                    contentStyle={{ background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: '#f8fafc' }}
+                    itemStyle={{ fontSize: '13px' }}
+                    labelStyle={{ fontSize: '13px', fontWeight: 'bold', color: '#38bdf8', marginBottom: '4px' }}
+                  />
+                  <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} />
+                  <Bar dataKey="Medelvärde" fill="#38bdf8" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="Min" fill="#475569" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="Max" fill="#a855f7" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
             </div>
           </div>
 
-          {/* Kodvisare */}
-          <div style={{ padding: '16px', overflowX: 'auto', maxHeight: '350px' }}>
-            <pre style={{
-              fontFamily: '"Fira Code", "Courier New", Courier, monospace',
-              fontSize: '12px',
-              margin: 0,
-              color: '#34d399', // Matrix-grön elegant syntaxfärg
-              lineHeight: '1.6'
+          {/* Data-output (Premium mörk IDE/Terminal-look) */}
+          <div style={{
+            background: '#020617',
+            border: '1px solid rgba(255, 255, 255, 0.04)',
+            borderRadius: '12px',
+            overflow: 'hidden',
+            boxShadow: 'inset 0 2px 8px rgba(0, 0, 0, 0.8)'
+          }}>
+            {/* Terminal Top Bar */}
+            <div style={{
+              background: 'rgba(255, 255, 255, 0.02)',
+              padding: '10px 16px',
+              borderBottom: '1px solid rgba(255, 255, 255, 0.04)',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
             }}>
-              {JSON.stringify(statsData.stats, null, 2)}
-            </pre>
+              <span style={{
+                fontSize: '11px',
+                fontFamily: 'monospace',
+                color: '#475569',
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em'
+              }}>
+                OUTPUT_BUFFER // JSON_MATRIX
+              </span>
+              <div style={{ display: 'flex', gap: '6px' }}>
+                <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#38bdf8' }} />
+                <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#475569' }} />
+              </div>
+            </div>
+
+            {/* Kodvisare - säkrad med optional chaining ?. */}
+            <div style={{ padding: '16px', overflowX: 'auto', maxHeight: '180px' }}>
+              <pre style={{
+                fontFamily: '"Fira Code", "Courier New", Courier, monospace',
+                fontSize: '12px',
+                margin: 0,
+                color: '#34d399',
+                lineHeight: '1.6'
+              }}>
+                {JSON.stringify(statsData?.stats, null, 2)}
+              </pre>
+            </div>
           </div>
+
         </div>
       )}
     </div>

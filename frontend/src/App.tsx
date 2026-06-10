@@ -10,67 +10,159 @@ export default function App() {
 
   return (
     <div style={{
-      fontFamily: 'system-ui, -apple-system, sans-serif',
-      background: '#0d9ea1',
+      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
+      background: '#090d16', // Djup, sofistikerad mörk rymdbakgrund
       minHeight: '100vh',
-      color: '#193370',
-      padding: '40px 20px'
+      color: '#f8fafc', // Krispig, vit-grå text för maximal läsbarhet
+      padding: '60px 20px',
+      letterSpacing: '-0.01em'
     }}>
-      <div style={{ maxWidth: '1000px', margin: '0 auto' }}>
+      <div style={{ maxWidth: '1100px', margin: '0 auto' }}>
 
-        {/* Header */}
-        <header style={{ marginBottom: '40px', borderBottom: '1px solid #022553', paddingBottom: '20px' }}>
-          <h1 style={{ fontSize: '32px', fontWeight: 800, margin: '0 0 8px 0', color: '#022553' }}>
-            Oraklet
-          </h1>
-          <p style={{ fontSize: '25px', color: '#022553', margin: 0 }}>
-            Enterprise-Grade Data & AI Processing Platform
-          </p>
+        {/* Premium Header */}
+        <header style={{
+          marginBottom: '48px',
+          borderBottom: '1px solid rgba(255, 255, 255, 0.06)',
+          paddingBottom: '32px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'flex-end',
+          flexWrap: 'wrap',
+          gap: '20px'
+        }}>
+          <div>
+            <h1 style={{
+              fontSize: '40px',
+              fontWeight: 800,
+              margin: '0 0 6px 0',
+              letterSpacing: '-0.03em',
+              background: 'linear-gradient(to right, #ffffff, #94a3b8)', // Lyxig textgradient
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+            }}>
+              Oraklet
+            </h1>
+            <p style={{
+              fontSize: '15px',
+              color: '#64748b', // Mjuk dämpad undertitel
+              fontWeight: 500,
+              margin: 0,
+              textTransform: 'uppercase',
+              letterSpacing: '0.05em'
+            }}>
+              Enterprise-Grade Data & AI Processing Platform
+            </p>
+          </div>
+
+          {/* Global System Alerts (Circuit Breaker instoppad i headern för renare yta) */}
+          <div style={{ minWidth: '240px' }}>
+            <CircuitBreakerStatus />
+          </div>
         </header>
 
-        {/* Global System Alerts (Circuit Breaker) */}
-        <CircuitBreakerStatus />
-
-        {/* Grid Layout för kontrollpanelen */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '24px' }}>
+        {/* Dashboard Layout Grid */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '32px' }}>
 
           {/* Sektion 1: Ingestering */}
-          <section>
+          <section style={{
+            background: '#0f172a',
+            borderRadius: '16px',
+            border: '1px solid rgba(255, 255, 255, 0.05)',
+            padding: '24px',
+            boxShadow: '0 4px 30px rgba(0, 0, 0, 0.2)'
+          }}>
             <DataUploader onUploadSuccess={(data) => setCurrentDataset(data)} />
           </section>
 
-          {/* Sektion 2: Status över aktivt dataset */}
+          {/* Sektion 2: Status över aktivt dataset (Visas som ett läckert ID-kort) */}
           {currentDataset && (
             <section style={{
-              background: '#fff',
-              padding: '20px',
-              borderRadius: '8px',
-              border: '1px solid #e2e8f0',
-              marginBottom: '20px'
+              background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)',
+              padding: '24px',
+              borderRadius: '16px',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              boxShadow: '0 10px 40px rgba(0,0,0,0.3)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '16px'
             }}>
-              <h3 style={{ marginTop: 0, color: '#0f172a' }}>Aktivt Dataset Inläst</h3>
-              <div style={{ display: 'flex', gap: '40px', fontSize: '14px' }}>
-                <div><strong>Rader:</strong> {currentDataset.rows}</div>
-                <div><strong>Kolumner:</strong> {currentDataset.columns.join(', ')}</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10b981', boxShadow: '0 0 12px #10b981' }} />
+                <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600, color: '#f1f5f9', letterSpacing: '-0.01em' }}>
+                  Active Dataset Mounted
+                </h3>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: '16px', fontSize: '14px' }}>
+                <div style={{ color: '#64748b' }}>Total Records:</div>
+                <div style={{ fontWeight: 600, color: '#e2e8f0' }}>{currentDataset.rows.toLocaleString()} rader</div>
+
+                <div style={{ color: '#64748b' }}>Schema Columns:</div>
+                <div style={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  gap: '6px',
+                  fontFamily: 'monospace',
+                  fontSize: '12px'
+                }}>
+                  {currentDataset.columns.map((col, idx) => (
+                    <span key={idx} style={{
+                      background: 'rgba(255,255,255,0.05)',
+                      padding: '2px 8px',
+                      borderRadius: '4px',
+                      border: '1px solid rgba(255,255,255,0.05)',
+                      color: '#94a3b8'
+                    }}>
+                      {col}
+                    </span>
+                  ))}
+                </div>
               </div>
             </section>
           )}
 
-          {/* Sektion 3: Statistik & Analys */}
-          <section>
-            <StatsDashboard />
-          </section>
+          {/* Sektion 3 & 4: Delad layout om skärmen är stor för maximal dashboard-känsla */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(450px, 1fr))',
+            gap: '32px'
+          }}>
+            {/* Sektion 3: Statistik & Analys */}
+            <section style={{
+              background: '#0f172a',
+              borderRadius: '16px',
+              border: '1px solid rgba(255, 255, 255, 0.05)',
+              padding: '24px',
+              boxShadow: '0 4px 30px rgba(0, 0, 0, 0.2)'
+            }}>
+              <StatsDashboard />
+            </section>
 
-          {/* Sektion 4: AI Pipeline Interaktion */}
-          <section>
-            <AIChat />
-          </section>
+            {/* Sektion 4: AI Pipeline Interaktion */}
+            <section style={{
+              background: '#0f172a',
+              borderRadius: '16px',
+              border: '1px solid rgba(255, 255, 255, 0.05)',
+              padding: '24px',
+              boxShadow: '0 4px 30px rgba(0, 0, 0, 0.2)'
+            }}>
+              <AIChat />
+            </section>
+          </div>
 
         </div>
 
-        {/* Footer */}
-        <footer style={{ marginTop: '60px', textAlign: 'center', fontSize: '12px', color: '#94a3b8' }}>
-          Oraklet Backend & Frontend Integration Layer • Full Fault-Tolerance Mode
+        {/* Modern Minimalist Footer */}
+        <footer style={{
+          marginTop: '80px',
+          borderTop: '1px solid rgba(255, 255, 255, 0.04)',
+          paddingTop: '24px',
+          textAlign: 'center',
+          fontSize: '12px',
+          color: '#475569',
+          fontFamily: 'monospace'
+        }}>
+          ORAKLET CORE // INTEGRATION LAYER // ACCELERATED INFERENCE MODE
         </footer>
 
       </div>

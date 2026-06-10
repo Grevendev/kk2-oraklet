@@ -179,12 +179,15 @@ class LLMRunner(PipelineStep[PromptBuilderOutput, LLMRunnerOutput]):
         def run_sync():
             return generator(
                 prompt,
-                max_new_tokens=60, # Håll det kort och koncist
-                do_sample=True,     
-                temperature=0.2,     # Lägre temperatur = mer strikt faktabaserad
-                top_k=30,            
-                top_p=0.85,          
-                repetition_penalty=1.3, 
+                max_new_tokens=60,
+                
+                # Stäng av sampling för att tvinga modellen att alltid välja det 
+                # grammatiskt mest korrekta ordet (eliminera hittepå-ord)
+                do_sample=False,     
+                
+                # Behåll straffavgiften så att den inte fastnar i upprepningar
+                repetition_penalty=1.2, 
+                
                 eos_token_id=tokenizer.eos_token_id,
             )
 

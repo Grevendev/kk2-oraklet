@@ -193,7 +193,8 @@ class LLMRunner(PipelineStep[PromptBuilderOutput, LLMRunnerOutput]):
 
         for attempt in range(self.retry.max_attempts):
             try:
-                result = anyio.from_thread.run(self._run_model_async, input.prompt)
+                # ÄNDRAT: Skicka input.messages istället för input.prompt
+                result = anyio.from_thread.run(self._run_model_async, input.messages)
                 raw_text = self._normalize_output(result)
 
                 self.circuit.after_success()
@@ -214,7 +215,8 @@ class LLMRunner(PipelineStep[PromptBuilderOutput, LLMRunnerOutput]):
                 self.circuit.after_failure()
 
                 try:
-                    fallback = anyio.from_thread.run(self._run_fallback_async, input.prompt)
+                    # ÄNDRAT: Skicka input.messages även till fallbacken
+                    fallback = anyio.from_thread.run(self._run_fallback_async, input.messages)
                     raw_text = self._normalize_output(fallback)
                     return LLMRunnerOutput(raw_output=raw_text)
                 except Exception as fallback_exc:

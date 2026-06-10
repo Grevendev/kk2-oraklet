@@ -29,7 +29,8 @@ export const StatsDashboard: React.FC = () => {
 
     return Object.entries(rawStats)
       // Ändra här: 'metrics' är nu automatiskt av typen ColumnMetrics
-      .filter(([_, metrics]) => metrics && typeof metrics.mean === 'number')
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      .filter(([_key, metrics]) => metrics && typeof metrics.mean === 'number')
       .map(([columnName, metrics]) => ({
         name: columnName,
         "Medelvärde": Number(metrics.mean.toFixed(2)),

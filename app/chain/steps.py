@@ -111,16 +111,14 @@ class PromptBuilder(PipelineStep[PromptBuilderInput, PromptBuilderOutput]):
             {
                 "role": "system",
                 "content": (
-                    f"{SYSTEM_PROMPT}\n\n"
-                    f"Du är en hjälpsam AI-dataanalytiker. Du måste svara på tydlig, naturlig och kortfattad svenska.\n"
-                    f"Här är statistisk data från det uppladdade datasetet:\n"
-                    f"{readable_stats}\n\n"
-                    f"Viktigt: Svara som en människa på löpande text. Upprepa inte råa JSON-parenteser eller programmeringskod i ditt svar."
+                    "Du är en dataanalytiker som bara svarar på svenska.\n"
+                    "Analysera statistiken nedan och sammanfatta kort vad du ser.\n"
+                    f"{readable_stats}"
                 )
             },
             {
                 "role": "user",
-                "content": f"Berätta om datasetet utifrån denna statistik. Vad ser du?"
+                "content": "Berätta kort om datasetet på svenska."
             }
         ]
 
@@ -164,31 +162,29 @@ class LLMRunner(PipelineStep[PromptBuilderOutput, LLMRunnerOutput]):
                     )
         return cls._pipeline
 
-    async def _run_model_async(self, messages: list):  # Ändrad signatur
+    async def _run_model_async(self, messages: list):
         generator = self._get_pipeline()
         tokenizer = generator.tokenizer
 
-        # Applicera modellens officiella chat-mall (lägger till rätt <|im_start|> automatiskt)
-        prompt = tokenizer.apply_chat_template(
+        # Generera basprompten utan den sista automatiska generation-taggen
+        raw_prompt = tokenizer.apply_chat_template(
             messages, 
             tokenize=False, 
             add_generation_prompt=True
         )
+        
+        # Tvinga modellen att starta sitt svar med en svensk mening!
+        prompt = f"{raw_prompt}Baserat på statistiken kan vi se att datasetet innehåller"
 
         def run_sync():
             return generator(
                 prompt,
-                max_new_tokens=80,
-                
-                # Slå på kontrollerad sampling istället för strikt "greedy" sökning
+                max_new_tokens=60, # Håll det kort och koncist
                 do_sample=True,     
-                temperature=0.3,     # Låg temperatur håller den till fakta...
-                top_k=40,            # ...men begränsar urvalet till de 40 bästa orden
-                top_p=0.85,          # Tar bort osannolika "svans-ord"
-                
-                # Straffa upprepningar hårt (1.0 = inget straff, > 1.0 = straff)
-                repetition_penalty=1.25, 
-                
+                temperature=0.2,     # Lägre temperatur = mer strikt faktabaserad
+                top_k=30,            
+                top_p=0.85,          
+                repetition_penalty=1.3, 
                 eos_token_id=tokenizer.eos_token_id,
             )
 
@@ -290,8 +286,9 @@ class ResponseParser(PipelineStep[LLMRunnerOutput, ResponseParserOutput]):
         answer = generated_part.replace("<|im_end|>", "").replace("<|im_start|>", "").strip()
 
         # Fallback ifall modellen skulle råka producera tom text
-        if not answer:
-            answer = "Kunde inte tolka eller extrahera ett svar från den lokala modellen."
+        # Snygga till så att den påbörjade meningen följer med i svaret
+        if not answer.startswith("Baserat på"):
+            answer = f"Baserat på statistiken kan vi se att datasetet innehåller {answer}"
 
         return ResponseParserOutput(
             question="(unknown — will be filled by /ai/ask endpoint)",

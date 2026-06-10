@@ -33,8 +33,9 @@ export const useData = () => {
       await fetchStats();
 
       return data;
-    } catch (err: any) {
-      setError(err.message || 'Ett oväntat fel uppstod vid uppladdning.');
+    } catch (err: unknown) {
+      const error = err as { message?: string; };
+      setError(error.message || 'Ett oväntat fel uppstod vid uppladdning.');
       throw err;
     } finally {
       setLoading(false);
@@ -50,7 +51,7 @@ export const useData = () => {
       }
       const data: StatsResponse = await response.json();
       setStatsData(data);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Fel vid hämtning av statistik:", err);
     }
   };

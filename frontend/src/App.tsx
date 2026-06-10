@@ -5,6 +5,7 @@ import { AIChat } from './components/AIChat';
 import { CircuitBreakerStatus } from './components/CircuitBreakerStatus';
 import { UploadResponse } from './types';
 import { OracleBrandIdentity } from './components/OracleBrandIdentity';
+
 export default function App() {
   const [currentDataset, setCurrentDataset] = useState<UploadResponse | null>(null);
 
@@ -64,7 +65,11 @@ export default function App() {
             padding: '24px',
             boxShadow: '0 4px 30px rgba(0, 0, 0, 0.2)'
           }}>
-            <DataUploader onUploadSuccess={(data) => setCurrentDataset(data)} />
+            {/* FIX: Lagt till onFileReset här för att nollställa tillståndet i föräldern */}
+            <DataUploader
+              onUploadSuccess={(data) => setCurrentDataset(data)}
+              onFileReset={() => setCurrentDataset(null)}
+            />
           </section>
 
           {/* Sektion 2: Status över aktivt dataset (Visas som ett läckert ID-kort) */}

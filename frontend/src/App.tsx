@@ -4,7 +4,7 @@ import { StatsDashboard } from './components/StatsDashboard';
 import { AIChat } from './components/AIChat';
 import { CircuitBreakerStatus } from './components/CircuitBreakerStatus';
 import { UploadResponse } from './types';
-
+import { OracleBrandIdentity } from './components/OracleBrandIdentity';
 export default function App() {
   const [currentDataset, setCurrentDataset] = useState<UploadResponse | null>(null);
 
@@ -31,17 +31,10 @@ export default function App() {
           gap: '20px'
         }}>
           <div>
-            <h1 style={{
-              fontSize: '40px',
-              fontWeight: 800,
-              margin: '0 0 6px 0',
-              letterSpacing: '-0.03em',
-              background: 'linear-gradient(to right, #ffffff, #94a3b8)', // Lyxig textgradient
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-            }}>
-              Oraklet
-            </h1>
+            {/* Ersatte gamla h1 med en lyxig varumärkesidentitet */}
+            <div style={{ margin: '10px 0 20px 0' }}>
+              <OracleBrandIdentity />
+            </div>
             <p style={{
               fontSize: '15px',
               color: '#64748b', // Mjuk dämpad undertitel

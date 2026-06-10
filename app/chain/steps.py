@@ -295,6 +295,14 @@ class ResponseParser(PipelineStep[LLMRunnerOutput, ResponseParserOutput]):
         
         # 2. Översätt de absolut vanligaste nyckelorden som den lilla engelska modellen spottar ur sig
         answer = answer.replace("rows", "rader").replace("columns", "kolumner").replace("entries", "datapunkter")
+
+        # Rensa bort de sista engelska parenteserna och tekniska strukturorden
+        answer = answer.replace("(index)", "")
+        answer = answer.replace("column", "kolumnen")
+        answer = answer.replace("as well as", "samt")
+        
+        # Ta bort eventuella dubbla mellanslag som kan ha uppstått vid rensningen
+        answer = " ".join(answer.split())
         
         # 3. Paketera svaret i en snygg, svensk presentation till din frontend
         final_answer = f"Baserat på statistiken kan vi se att datasetet innehåller {answer}"

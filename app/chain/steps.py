@@ -6,6 +6,7 @@ import threading
 import os
 import asyncio
 import time
+import re
 from transformers import pipeline
 
 from app.config import (
@@ -79,13 +80,15 @@ class PromptBuilder(PipelineStep[PromptBuilderInput, PromptBuilderOutput]):
         if not input.stats:
             raise ValueError("PromptBuilder received empty statistics.")
 
-        stats_section = f"Dataset statistics:\n{input.stats}\n"
+        stats_section = f"Dataset statistics:\n{input.stats}"
 
+        # Använd strikt ChatML-format som SmolLM2 förväntar sig för instruktionsföljsamhet
         full_prompt = (
-            f"{SYSTEM_PROMPT}\n\n"
-            f"{stats_section}\n"
-            f"User question: {input.question}\n"
-            f"Answer in clear and concise Swedish."
+            f"<|im_start|>system\n{SYSTEM_PROMPT}\n"
+            f"Svara alltid på tydlig och kortfattad svenska.\n"
+            f"{stats_section}<|im_end|>\n"
+            f"<|im_start|>user\n{input.question}<|im_end|>\n"
+            f"<|im_start|>assistant\n"
         )
 
         if len(full_prompt) > MAX_PROMPT_LENGTH:
@@ -95,7 +98,7 @@ class PromptBuilder(PipelineStep[PromptBuilderInput, PromptBuilderOutput]):
 
 
 # ============================================================
-# Step 2 — LLLRunner
+# Step 2 — LLMRunner
 # ============================================================
 
 class LLMRunner(PipelineStep[PromptBuilderOutput, LLMRunnerOutput]):
@@ -114,8 +117,9 @@ class LLMRunner(PipelineStep[PromptBuilderOutput, LLMRunnerOutput]):
                 def __call__(self, prompt, **_):
                     return [{
                         "generated_text": (
-                            f"{prompt}\n\n"
-                            f"Answer: Detta är ett mockat AI‑svar."
+                            f"{prompt}"
+                            f"<|im_start|>thought\nAnalyserar data...\n<|im_end|>\n"
+                            f"Detta är ett mockat AI‑svar."
                         )
                     }]
             return FakeHF()
@@ -136,9 +140,10 @@ class LLMRunner(PipelineStep[PromptBuilderOutput, LLMRunnerOutput]):
         def run_sync():
             return generator(
                 prompt,
-                max_new_tokens=200,
-                temperature=0.3,
-                do_sample=False
+                max_new_tokens=80,
+                temperature=0.2,
+                do_sample=False,
+                eos_token_id=0,  # Stoppa genereringen vid end-of-sequence
             )
 
         with anyio.move_on_after(LLM_TIMEOUT_SECONDS) as scope:
@@ -151,7 +156,7 @@ class LLMRunner(PipelineStep[PromptBuilderOutput, LLMRunnerOutput]):
 
     async def _run_fallback_async(self, prompt: str):
         return {
-            "generated_text": f"{prompt}\n\nAnswer: Detta är ett fallback‑svar."
+            "generated_text": f"{prompt}<|im_start|>thought\nFallback logik aktiverad.\n<|im_end|>\nDetta är ett fallback‑svar."
         }
 
     def _sleep(self, seconds: float):
@@ -186,13 +191,13 @@ class LLMRunner(PipelineStep[PromptBuilderOutput, LLMRunnerOutput]):
                     })
                     self._sleep(delay)
                     continue
-                # Alla försök mot primär LLM misslyckades. Registrera fel nu!
+                
                 self.circuit.after_failure()
 
                 try:
                     fallback = anyio.from_thread.run(self._run_fallback_async, input.prompt)
-                    
-                    return LLMRunnerOutput(raw_output=fallback)
+                    raw_text = self._normalize_output(fallback)
+                    return LLMRunnerOutput(raw_output=raw_text)
                 except Exception as fallback_exc:
                     self.circuit.after_failure()
                     raise PipelineError(
@@ -212,32 +217,36 @@ class ResponseParser(PipelineStep[LLMRunnerOutput, ResponseParserOutput]):
         logger.info("ResponseParser invoked")
 
         raw_output = input.raw_output
+        raw_text = raw_output.get("generated_text", str(raw_output)) if isinstance(raw_output, dict) else str(raw_output)
 
-        if isinstance(raw_output, dict):
-            raw_text = (
-                raw_output.get("generated_text")
-                or raw_output.get("answer")
-                or raw_output.get("text")
-                or str(raw_output)
-            )
+        # Skär bort allt som låg i prompten fram till sista <|im_start|>assistant\n
+        assistant_marker = "<|im_start|>assistant\n"
+        if assistant_marker in raw_text:
+            generated_part = raw_text.split(assistant_marker)[-1].strip()
         else:
-            raw_text = raw_output
+            generated_part = raw_text.strip()
 
-        raw = raw_text.strip()
+        # Bryt ut eventuella <|im_start|>thought block om modellen skapat resonemang
+        reasoning = "Modellen genererade svar lokalt baserat på tillgänglig dataset-statistik."
+        thought_match = re.search(r"<\|im_start\|>thought\n(.*?)(?:<\|im_end\|>|$)", generated_part, re.DOTALL)
+        
+        if thought_match:
+            reasoning = thought_match.group(1).strip()
+            # Ta bort thought-blocket från det slutgiltiga svaret
+            generated_part = re.sub(r"<\|im_start\|>thought\n.*?(?:<\|im_end\|>|$)", "", generated_part, flags=re.DOTALL).strip()
 
-        if "Answer:" not in raw and (os.getenv("TESTING") == "1" or "PYTEST_CURRENT_TEST" in os.environ):
-            answer = "Detta är ett mockat AI‑svar."
-        else:
-            cleaned = raw.split("User question:")[-1].strip()
-            if "Answer:" in cleaned:
-                cleaned = cleaned.split("Answer:", 1)[-1].strip()
-            answer = cleaned if cleaned else raw
+        # Rensa bort eventuella hängande ChatML-taggar från svaret
+        answer = generated_part.replace("<|im_end|>", "").replace("<|im_start|>", "").strip()
+
+        # Fallback ifall modellen skulle råka producera tom text
+        if not answer:
+            answer = "Kunde inte tolka eller extrahera ett svar från den lokala modellen."
 
         return ResponseParserOutput(
             question="(unknown — will be filled by /ai/ask endpoint)",
             answer=answer,
-            reasoning="Mocked reasoning (parser)",
-            stats_used={"temp": {"mean": 10}},
+            reasoning=reasoning,
+            stats_used={},
             model=MODEL_NAME
         )
 

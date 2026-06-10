@@ -41,7 +41,7 @@ MODEL_NAME = "HuggingFaceTB/SmolLM2-135M-Instruct"
 # Timeout configuration for LLM calls
 # ============================================================
 
-LLM_TIMEOUT_SECONDS = 20
+LLM_TIMEOUT_SECONDS = 45
 MAX_PROMPT_LENGTH = 8000
 
 # Stats cache TTL (seconds)

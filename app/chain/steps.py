@@ -288,25 +288,32 @@ class ResponseParser(PipelineStep[LLMRunnerOutput, ResponseParserOutput]):
         # Rensa bort eventuella hängande ChatML-taggar från svaret
         answer = generated_part.replace("<|im_end|>", "").replace("<|im_start|>", "").strip()
 
-        # --- HÄR ÄR DEN NYA STRUKTURERINGEN ---
+        # --- HÄR ÄR DEN UPPDATERADE OCH SÄKRA STRUKTURERINGEN ---
         
         # 1. Städa bort vår engelska pre-fill-start om modellen upprepade den
         answer = answer.replace("Based on the statistics, this dataset contains", "").strip()
         
-        # 2. Översätt de absolut vanligaste nyckelorden som den lilla engelska modellen spottar ur sig
+        # 2. Översätt de absolut vanligaste nyckelorden och rensa tekniskt brus
         answer = answer.replace("rows", "rader").replace("columns", "kolumner").replace("entries", "datapunkter")
-
-        # Rensa bort de sista engelska parenteserna och tekniska strukturorden
         answer = answer.replace("(index)", "")
         answer = answer.replace("column", "kolumnen")
         answer = answer.replace("as well as", "samt")
         
-        # Ta bort eventuella dubbla mellanslag som kan ha uppstått vid rensningen
+        # --- ROBUST KLIPPNING AV OAVSLUTADE MENINGAR ---
+        # Om modellen fick slut på tokens och klippte mitt i en bisats, letar vi efter sista fullständiga meningen
+        if "." in answer:
+            # Behåll allt fram till den sista punkten och lägg till punkten igen
+            answer = answer.rsplit(".", 1)[0].strip() + "."
+        else:
+            # Om modellen inte hann sätta en enda punkt, avslutar vi med ellipsis så det ser avsiktligt ut
+            if not answer.endswith((".", "!", "?")):
+                answer = answer.strip() + "..."
+
+        # Ta bort eventuella dubbla mellanslag som kan ha uppstått under tvättningen
         answer = " ".join(answer.split())
         
         # 3. Paketera svaret i en snygg, svensk presentation till din frontend
         final_answer = f"Baserat på statistiken kan vi se att datasetet innehåller {answer}"
-
         return ResponseParserOutput(
             question="(unknown — will be filled by /ai/ask endpoint)",
             answer=final_answer, # Skicka ut det lokaliserade svaret

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { dataApi } from '../api/endpoints';
 import { AIResponse } from '../types';
+import { SkeletonLoader } from './SkeletonLoader';
 
 export const AIChat: React.FC = () => {
   const [question, setQuestion] = useState('');
@@ -20,10 +21,7 @@ export const AIChat: React.FC = () => {
       setChatHistory(prev => [result, ...prev]);
       setQuestion('');
     } catch (err: unknown) {
-      // Vi castar err till en struktur vi förväntar oss från Axios/API:et
       const error = err as { response?: { data?: { message?: string; }; }; };
-
-      // Vi använder optional chaining (?.) för att säkert komma åt meddelandet
       const backendMessage = error.response?.data?.message || 'Kunde inte kommunicera med Oraklet.';
       setError(backendMessage);
     } finally {
@@ -127,6 +125,9 @@ export const AIChat: React.FC = () => {
         overflowY: 'auto',
         paddingRight: '4px'
       }}>
+        {/* Visa den pulserande AI-platshållaren överst i strömmen under laddning */}
+        {loading && <SkeletonLoader variant="ai-chat" />}
+
         {chatHistory.map((chat, idx) => (
           <div key={idx} style={{
             background: 'rgba(255, 255, 255, 0.01)',

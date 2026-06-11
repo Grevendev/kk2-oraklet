@@ -1,14 +1,16 @@
 import React, { useState, useMemo } from 'react';
 import { dataApi } from '../api/endpoints';
 import { StatsResponse } from '../types';
-// Importera Recharts-komponenter för diagrammet
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, CartesianGrid } from 'recharts';
 import { SkeletonLoader } from './SkeletonLoader';
+import { useToast } from '../context/ToastContext'; // 1. Importera global toast-hook
 
 export const StatsDashboard: React.FC = () => {
   const [statsData, setStatsData] = useState<StatsResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const { showToast } = useToast(); // 2. Initiera toasten
 
   const fetchStats = async () => {
     setLoading(true);
@@ -16,12 +18,17 @@ export const StatsDashboard: React.FC = () => {
     try {
       const data = await dataApi.getStats();
       setStatsData(data);
-    } catch (err: unknown) {
-      // Vi castar err till en struktur som förväntas vid API-anrop
-      const error = err as { response?: { data?: { message?: string; }; }; };
 
+      // 3. Skjut en premium framgångs-toast
+      showToast('Analys slutförd: Statistisk matris genererad via ETag-cache.', 'success');
+    } catch (err: unknown) {
+      const error = err as { response?: { data?: { message?: string; }; }; };
       const backendMessage = error.response?.data?.message || 'Kunde inte hämta statistik. Har du laddat upp ett dataset?';
+
       setError(backendMessage);
+
+      // 4. Skjut en toast för anslutnings- eller valideringsfelet
+      showToast(backendMessage, 'error');
     } finally {
       setLoading(false);
     }
@@ -32,7 +39,6 @@ export const StatsDashboard: React.FC = () => {
     const rawStats = statsData?.stats || {};
 
     return Object.entries(rawStats)
-      // Ändra här: 'metrics' är nu automatiskt av typen ColumnMetrics
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       .filter(([_key, metrics]) => metrics && typeof metrics.mean === 'number')
       .map(([columnName, metrics]) => ({
@@ -69,7 +75,7 @@ export const StatsDashboard: React.FC = () => {
           width: '100%',
           padding: '12px 20px',
           background: loading ? '#1e293b' : 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)',
-          color: loading ? '#94a3b8' : '#38bdf8', // Neonblå elegant text
+          color: loading ? '#94a3b8' : '#38bdf8',
           fontWeight: 600,
           fontSize: '14px',
           border: loading ? '1px solid rgba(255, 255, 255, 0.05)' : '1px solid rgba(56, 189, 248, 0.2)',
@@ -99,12 +105,12 @@ export const StatsDashboard: React.FC = () => {
         {loading ? (
           <>
             <span style={{ display: 'inline-block', animation: 'spin 1s linear infinite' }}>⏳</span>
-            Analyserar matriser...
+            Anlyserar matriser...
           </>
         ) : 'Exekvera statistisk profilering'}
       </button>
 
-      {/* Felhantering (Sofistikerad röd alert box) */}
+      {/* Felhantering */}
       {error && (
         <div style={{
           padding: '14px 16px',
@@ -120,10 +126,8 @@ export const StatsDashboard: React.FC = () => {
         </div>
       )}
 
-      {/* Skräddarsydd skeleton loader för statistikpaneler */}
       {loading && <SkeletonLoader variant="dashboard-stats" />}
 
-      {/* Trygg typsäkrad rendering via chartData-kontroll */}
       {!loading && statsData && chartData.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
 
@@ -159,7 +163,7 @@ export const StatsDashboard: React.FC = () => {
             </div>
           </div>
 
-          {/* Data-output (Premium mörk IDE/Terminal-look) */}
+          {/* Data-output */}
           <div style={{
             background: '#020617',
             border: '1px solid rgba(255, 255, 255, 0.04)',
@@ -167,7 +171,6 @@ export const StatsDashboard: React.FC = () => {
             overflow: 'hidden',
             boxShadow: 'inset 0 2px 8px rgba(0, 0, 0, 0.8)'
           }}>
-            {/* Terminal Top Bar */}
             <div style={{
               background: 'rgba(255, 255, 255, 0.02)',
               padding: '10px 16px',
@@ -191,7 +194,6 @@ export const StatsDashboard: React.FC = () => {
               </div>
             </div>
 
-            {/* Kodvisare - säkrad med optional chaining ?. */}
             <div style={{ padding: '16px', overflowX: 'auto', maxHeight: '180px' }}>
               <pre style={{
                 fontFamily: '"Fira Code", "Courier New", Courier, monospace',

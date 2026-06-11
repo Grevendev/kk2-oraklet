@@ -1,13 +1,13 @@
 import React, { useState, useRef } from 'react';
 import { dataApi } from '../api/endpoints';
 import { UploadResponse } from '../types';
+import { SkeletonLoader } from './SkeletonLoader';
 
 interface DataUploaderProps {
   onUploadSuccess: (data: UploadResponse) => void;
   onFileReset: () => void;
 }
 
-// FIX: Lagt till onFileReset här i props-destruktureringen
 export const DataUploader: React.FC<DataUploaderProps> = ({ onUploadSuccess, onFileReset }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -31,7 +31,6 @@ export const DataUploader: React.FC<DataUploaderProps> = ({ onUploadSuccess, onF
       setUploadedFile({ name: file.name, size: file.size });
       onUploadSuccess(response);
     } catch (err: unknown) {
-      // Typ-vakt för att säkert hantera API-fel
       const error = err as { response?: { data?: { message?: string; }; }; message?: string; };
 
       if (error.response?.data?.message) {
@@ -50,7 +49,7 @@ export const DataUploader: React.FC<DataUploaderProps> = ({ onUploadSuccess, onF
     e.preventDefault();
     e.stopPropagation();
 
-    setUploadedFile(null); // Rensade även bort den dubbla raden härifrån
+    setUploadedFile(null);
     onFileReset();
 
     if (fileInputRef.current) {
@@ -83,21 +82,23 @@ export const DataUploader: React.FC<DataUploaderProps> = ({ onUploadSuccess, onF
           flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
-          padding: '40px 20px',
+          padding: loading ? '10px' : '40px 20px', // Krymper paddingen något under loading för att matcha skelettets storlek perfekt
           background: loading
-            ? '#0f172a'
+            ? 'transparent'
             : uploadedFile
               ? 'rgba(52, 211, 153, 0.02)'
               : 'rgba(255, 255, 255, 0.01)',
           border: loading
-            ? '2px dashed rgba(168, 85, 247, 0.2)'
+            ? '1px solid transparent'
             : uploadedFile
               ? '2px solid rgba(52, 211, 153, 0.3)'
               : '2px dashed rgba(255, 255, 255, 0.1)',
           borderRadius: '12px',
           cursor: loading ? 'not-allowed' : uploadedFile ? 'default' : 'pointer',
           transition: 'all 0.2s ease',
-          boxShadow: uploadedFile ? '0 4px 20px rgba(52, 211, 153, 0.03)' : 'inset 0 2px 4px rgba(0, 0, 0, 0.4)'
+          boxShadow: uploadedFile ? '0 4px 20px rgba(52, 211, 153, 0.03)' : loading ? 'none' : 'inset 0 2px 4px rgba(0, 0, 0, 0.4)',
+          width: '100%',
+          boxSizing: 'border-box'
         }}
         onMouseEnter={(e) => {
           if (!loading && !uploadedFile) {
@@ -124,23 +125,10 @@ export const DataUploader: React.FC<DataUploaderProps> = ({ onUploadSuccess, onF
 
         {/* Dynamiskt UI-innehåll baserat på status: LOADING -> UPLOADED -> DEFAULT */}
         {loading ? (
-          <div style={{ textAlign: 'center' }}>
-            <div style={{
-              fontSize: '24px',
-              marginBottom: '12px',
-              animation: 'pulse 1.5s infinite ease-in-out'
-            }}>
-              ⚙️
-            </div>
-            <div style={{ fontSize: '14px', fontWeight: 600, color: '#a855f7', marginBottom: '4px' }}>
-              Kör defensiv datavalidering...
-            </div>
-            <div style={{ fontSize: '12px', color: '#475569', fontFamily: 'monospace' }}>
-              PARSING_SCHEMA_MATRICES
-            </div>
-          </div>
+          // Injekterar den pulserande rutan för filanalys
+          <SkeletonLoader variant="uploader-progress" />
         ) : uploadedFile ? (
-          /* DET NYA FINARE LÄGET NÄR EN FIL ÄR UPPLADDAD */
+          /* DET FINARE LÄGET NÄR EN FIL ÄR UPPLADDAD */
           <div style={{
             display: 'flex',
             alignItems: 'center',
@@ -151,6 +139,7 @@ export const DataUploader: React.FC<DataUploaderProps> = ({ onUploadSuccess, onF
             borderRadius: '10px',
             maxWidth: '450px',
             width: '100%',
+            boxSizing: 'border-box',
             boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
             cursor: 'default'
           }}>

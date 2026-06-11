@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [ main ]
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true # Tvingar fram Node 24 för alla actions
+
 jobs:
   test-and-build:
     runs-on: ubuntu-latest
@@ -29,15 +32,15 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm' # Automatiskt caching av npm-paket!
+          node-version: '22' # Uppgraderad till 22 för bättre framtidssäkerhet
+          cache: 'npm'
           cache-dependency-path: frontend/package-lock.json
 
       - name: Install Frontend Dependencies
-        run: cd frontend && npm install --include=dev
-        
+        run: cd frontend && npm ci # Använd 'npm ci' istället för 'npm install' i CI!
+
       - name: Lint Frontend
-        run: cd frontend && npm run lint # Nytt: Säkerställer kodkvalitet
+        run: cd frontend && npm run lint
         
       - name: Run Frontend Tests
         run: cd frontend && npm test

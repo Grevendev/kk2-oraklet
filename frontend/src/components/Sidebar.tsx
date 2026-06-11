@@ -65,7 +65,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             gap: '6px'
           }}
         >
-          <span>📁</span> Visa historik
+          <span>📁</span> Meny
         </motion.button>
       ) : (
         <motion.div

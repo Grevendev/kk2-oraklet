@@ -23,14 +23,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
     session.title.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  // Om panelen är minimerad, visa den eleganta toggle-knappen ute i kanten
   if (!isOpen) {
     return (
       <button
         onClick={() => setIsOpen(true)}
         style={{
           position: 'fixed',
-          right: '20px',
+          left: '20px', // Justerad till vänster
           top: '20px',
           zIndex: 50,
           background: '#0f172a',
@@ -57,11 +56,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
       width: '300px',
       height: '100vh',
       background: '#050b14',
-      borderLeft: '1px solid rgba(255, 255, 255, 0.05)',
+      borderRight: '1px solid rgba(255, 255, 255, 0.05)', // Ändrat till borderRight
       display: 'flex',
       flexDirection: 'column',
       padding: '20px',
-      boxShadow: '-4px 0 30px rgba(0,0,0,0.4)',
+      boxShadow: '4px 0 30px rgba(0,0,0,0.4)', // Kastar skugga åt höger istället
       boxSizing: 'border-box'
     }}>
       {/* Top Kontroller */}
@@ -118,8 +117,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
         }}
       />
 
-      {/* Lista över sparade händelser */}
-      <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+      {/* Lista över sparade händelser med osynlig/tunn scroll */}
+      <div
+        className="custom-scrollbar"
+        style={{
+          flex: 1,
+          overflowY: 'auto',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '6px',
+        }}
+      >
         <div style={{ fontSize: '11px', color: '#475569', fontWeight: 700, marginBottom: '6px', letterSpacing: '0.03em' }}>
           SENASTE AKTIVITETER
         </div>

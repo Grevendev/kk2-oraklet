@@ -10,19 +10,16 @@ import { Sidebar } from './components/Sidebar';
 export default function App() {
   const [currentDataset, setCurrentDataset] = useState<UploadResponse | null>(null);
 
-  // Tillstånd för chattsessioner, laddas dynamiskt från localStorage om det finns
   const [sessions, setSessions] = useState<ChatSession[]>(() => {
     const saved = localStorage.getItem('oraklet_sessions');
     return saved ? JSON.parse(saved) : [];
   });
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
 
-  // Spara sessioner automatiskt i webbläsarens minne när de ändras
   useEffect(() => {
     localStorage.setItem('oraklet_sessions', JSON.stringify(sessions));
   }, [sessions]);
 
-  // Funktion för att registrera en ny aktivitet/körning i historiken
   const handleNewSession = (title: string) => {
     const newSession: ChatSession = {
       id: String(Date.now()),
@@ -36,8 +33,20 @@ export default function App() {
   return (
     <div style={{ display: 'flex', width: '100vw', height: '100vh', background: '#090d16', overflow: 'hidden' }}>
 
-      {/* VÄNSTER SIDA: Din huvudsakliga Dashboard */}
-      <div style={{
+      {/* VÄNSTER SIDA: Minnesdashboard (Sidebar numera placerad först) */}
+      <Sidebar
+        sessions={sessions}
+        currentSessionId={currentSessionId}
+        onSelectSession={(id) => setCurrentSessionId(id)}
+        onNewChat={() => handleNewSession('Ny odefinierad session')}
+        onClearHistory={() => {
+          setSessions([]);
+          setCurrentSessionId(null);
+        }}
+      />
+
+      {/* HÖGER SIDA: Din huvudsakliga Dashboard */}
+      <div className="custom-scrollbar" style={{
         flex: 1,
         fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
         color: '#f8fafc',
@@ -93,7 +102,6 @@ export default function App() {
               <DataUploader
                 onUploadSuccess={(data) => {
                   setCurrentDataset(data);
-                  // Skapa en rad i minnesdashboarden automatiskt vid lyckad uppladdning!
                   handleNewSession(`Dataset monterat (${data.columns.length} kolumner)`);
                 }}
                 onFileReset={() => setCurrentDataset(null)}
@@ -170,7 +178,6 @@ export default function App() {
                 padding: '24px',
                 boxShadow: '0 4px 30px rgba(0, 0, 0, 0.2)'
               }}>
-                {/* Vi kan skicka med en callback om du vill lägga till sessioner direkt inifrån chatten */}
                 <AIChat />
               </section>
             </div>
@@ -192,18 +199,6 @@ export default function App() {
 
         </div>
       </div>
-
-      {/* HÖGER SIDA: Minnesdashboard (Sidebar) */}
-      <Sidebar
-        sessions={sessions}
-        currentSessionId={currentSessionId}
-        onSelectSession={(id) => setCurrentSessionId(id)}
-        onNewChat={() => handleNewSession('Ny odefinierad session')}
-        onClearHistory={() => {
-          setSessions([]);
-          setCurrentSessionId(null);
-        }}
-      />
 
     </div>
   );

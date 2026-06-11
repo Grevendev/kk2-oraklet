@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { ChatSession } from '../types';
 import { SkeletonLoader } from './SkeletonLoader';
 import { useToast } from '../context/ToastContext';
-import { motion, AnimatePresence } from 'framer-motion'; // Importera Framer Motion
+import { motion, AnimatePresence } from 'framer-motion';
+import { Settings } from './Settings'; // Importera den nya Settings-komponenten
 
 interface SidebarProps {
   sessions: ChatSession[];
@@ -77,25 +78,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
           transition={{ type: 'spring', stiffness: 300, damping: 30 }}
           style={{
             height: '100vh',
-            background: '#050b14',
-            borderRight: '1px solid rgba(255, 255, 255, 0.05)',
+            background: 'var(--bg-sidebar)', // Dynamisk CSS-variabel för ljust/mörkt läge
+            borderRight: '1px solid var(--border-color)', // Dynamisk CSS-variabel
             display: 'flex',
             flexDirection: 'column',
             padding: '20px',
             boxShadow: '4px 0 30px rgba(0,0,0,0.4)',
             boxSizing: 'border-box',
-            overflow: 'hidden' // Viktigt under tiden panelen expanderar/krymper
+            overflow: 'hidden'
           }}
         >
           {/* Top Kontroller */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-            <span style={{ fontSize: '11px', fontFamily: 'monospace', color: '#475569', letterSpacing: '0.05em', fontWeight: 600 }}>
+            <span style={{ fontSize: '11px', fontFamily: 'monospace', color: 'var(--text-muted)', letterSpacing: '0.05em', fontWeight: 600 }}>
               MEMORY_DASHBOARD
             </span>
             <motion.button
               whileHover={{ scale: 1.2, color: '#f43f5e' }}
               onClick={() => setIsOpen(false)}
-              style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '16px' }}
+              style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '16px' }}
               title="Göm panel"
             >
               ✕
@@ -138,9 +139,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 padding: '10px 12px',
                 marginBottom: '24px',
                 background: 'rgba(255, 255, 255, 0.02)',
-                border: '1px solid rgba(255, 255, 255, 0.06)',
+                border: '1px solid var(--border-color)',
                 borderRadius: '8px',
-                color: '#f8fafc',
+                color: 'var(--text-main)',
                 fontSize: '13px',
                 outline: 'none',
                 boxSizing: 'border-box'
@@ -159,18 +160,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
               gap: '6px',
             }}
           >
-            <div style={{ fontSize: '11px', color: '#475569', fontWeight: 700, marginBottom: '6px', letterSpacing: '0.03em' }}>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 700, marginBottom: '6px', letterSpacing: '0.03em' }}>
               SENASTE AKTIVITETER
             </div>
 
             {loading ? (
               <SkeletonLoader variant="sidebar-items" />
             ) : filteredSessions.length === 0 ? (
-              <div style={{ fontSize: '12px', color: '#334155', fontStyle: 'italic', padding: '10px' }}>
+              <div style={{ fontSize: '12px', color: 'var(--text-muted)', fontStyle: 'italic', padding: '10px' }}>
                 {searchTerm ? 'Inga matchande sessioner hittades' : 'Ingen historik lagrad ännu'}
               </div>
             ) : (
-              // AnimatePresence låter list-items glida bort snyggt vid filtrering eller borttagning
               <AnimatePresence>
                 {filteredSessions.map((session) => {
                   const isActive = session.id === currentSessionId;
@@ -181,20 +181,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, x: -10 }}
-                      whileHover={{ x: 4, background: 'rgba(255, 255, 255, 0.04)', color: '#f8fafc' }}
+                      whileHover={{ x: 4, background: 'rgba(255, 255, 255, 0.04)', color: 'var(--text-main)' }}
                       onClick={() => onSelectSession(session.id)}
                       style={{
                         padding: '12px',
                         borderRadius: '8px',
                         background: isActive ? 'rgba(255, 255, 255, 0.04)' : 'transparent',
-                        color: isActive ? '#f8fafc' : '#94a3b8',
+                        color: isActive ? 'var(--text-main)' : 'var(--text-muted)',
                         fontSize: '13px',
                         fontWeight: isActive ? 600 : 400,
                         cursor: 'pointer',
                         whiteSpace: 'nowrap',
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
-                        border: isActive ? '1px solid rgba(255, 255, 255, 0.08)' : '1px solid transparent',
+                        border: isActive ? '1px solid var(--border-color)' : '1px solid transparent',
                         boxSizing: 'border-box'
                       }}
                     >
@@ -205,6 +205,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </AnimatePresence>
             )}
           </div>
+
+          {/* Inställningskomponent injicerad säkert ovanför destruktiva systemkommandon */}
+          <Settings />
 
           {/* Rensa-knapp i botten */}
           {!loading && sessions.length > 0 && (

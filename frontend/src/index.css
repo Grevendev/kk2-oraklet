@@ -1,0 +1,184 @@
+/* ==========================================================================
+   1. DESIGN SYSTEM & TEMAVARIABLER (Light / Dark Mode)
+   ========================================================================== */
+
+:root {
+  /* Färgpalett för standardmörkt läge (Premium Cyber-look) */
+  --bg-app: #020617;
+  /* Slate 950 */
+  --bg-sidebar: #050b14;
+  /* Deep custom dark */
+  --bg-card: #0b1329;
+  /* Mellanmörk panel */
+
+  --text-main: #f8fafc;
+  /* Slate 50 */
+  --text-muted: #64748b;
+  /* Slate 500 */
+  --text-disabled: #334155;
+  /* Slate 700 */
+
+  --border-color: rgba(255, 255, 255, 0.05);
+  --border-focus: rgba(168, 85, 247, 0.4);
+  /* Lila accent */
+
+  /* Accentfärger */
+  --primary: #38bdf8;
+  /* Sky 400 */
+  --success: #10b981;
+  /* Emerald 500 */
+  --error: #ef4444;
+  /* Red 500 */
+  --warning: #f59e0b;
+  /* Amber 500 */
+  --info: #3b82f6;
+  /* Blue 500 */
+}
+
+:root.light-mode {
+  /* Färgpalett för ljust läge (Klar och ren UI) */
+  --bg-app: #f8fafc;
+  /* Slate 50 */
+  --bg-sidebar: #f1f5f9;
+  /* Slate 100 */
+  --bg-card: #ffffff;
+  /* Ren vit */
+
+  --text-main: #0f172a;
+  /* Slate 900 */
+  --text-muted: #64748b;
+  /* Slate 500 */
+  --text-disabled: #cbd5e1;
+  /* Slate 300 */
+
+  --border-color: rgba(0, 0, 0, 0.08);
+  --border-focus: rgba(168, 85, 247, 0.5);
+
+  /* Justerade accenter för bättre kontrast på ljus bakgrund */
+  --primary: #0284c7;
+  /* Sky 600 */
+  --success: #15803d;
+  /* Green 700 */
+  --error: #b91c1c;
+  /* Red 700 */
+  --warning: #b45309;
+  /* Amber 700 */
+  --info: #1d4ed8;
+  /* Blue 700 */
+}
+
+/* ==========================================================================
+   2. GLOBAL ÅTERSTÄLLNING (CSS Reset)
+   ========================================================================== */
+
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  background-color: var(--bg-app);
+  color: var(--text-main);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji';
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  transition: background-color 0.3s ease, color 0.3s ease;
+  overflow: hidden;
+  /* Låter komponenter (t.ex. main layout) styra sina egna scroll-scopes */
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+/* Snabba fixar för interaktiva element */
+input,
+button,
+textarea,
+select {
+  font-family: inherit;
+  font-size: inherit;
+}
+
+a {
+  color: var(--primary);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+/* ==========================================================================
+   3. SYSTEM- OCH HJÄLPKLASSER
+   ========================================================================== */
+
+/* Gömer scrollbars men behåller funktionalitet för t.ex. historiklistan */
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  /* IE and Edge */
+  scrollbar-width: none;
+  /* Firefox */
+}
+
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+  /* Chrome, Safari and Opera */
+}
+
+/* Globalt stajlad scrollbar för områden som faktiskt ska synas */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+/* Monospace text-styling för kod/system-loggar */
+code,
+pre {
+  font-family: 'Fira Code', 'Courier New', Courier, monospace;
+}
+
+/* Snygg mikro-shimmer effekt som kan användas för Skeleton-laddare */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.shimmer-effect {
+  background: linear-gradient(90deg,
+      rgba(255, 255, 255, 0.01) 25%,
+      rgba(255, 255, 255, 0.05) 50%,
+      rgba(255, 255, 255, 0.01) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.6s infinite linear;
+}
+
+.light-mode .shimmer-effect {
+  background: linear-gradient(90deg,
+      rgba(0, 0, 0, 0.03) 25%,
+      rgba(0, 0, 0, 0.08) 50%,
+      rgba(0, 0, 0, 0.03) 75%);
+  background-size: 200% 100%;
+}

@@ -37,3 +37,10 @@ export interface CircuitBreakerState {
   retryAfter: number;
   message: string;
 }
+export interface ChatSession {
+  id: string;
+  title: string;
+  createdAt: string;
+  // Valfritt: Om du vill spara historiken direkt i sessionen
+  history?: AIResponse[];
+}

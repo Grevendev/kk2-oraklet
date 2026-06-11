@@ -21,9 +21,14 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noImplicitReturns": true,
-    "noFallthroughCasesInSwitch": true
+    "noFallthroughCasesInSwitch": true,
+    /* Viktigt för Vite och CSS-hantering */
+    "types": [
+      "vite/client"
+    ]
   },
   "include": [
-    "src"
+    "src",
+    "src/**/*.d.ts"
   ]
 }

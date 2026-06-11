@@ -3,7 +3,7 @@ import { dataApi } from '../api/endpoints';
 import { AIResponse } from '../types';
 import { SkeletonLoader } from './SkeletonLoader';
 import { useToast } from '../context/ToastContext';
-import { motion, AnimatePresence } from 'framer-motion'; // Importera Framer Motion
+import { motion, AnimatePresence } from 'framer-motion';
 
 export const AIChat: React.FC = () => {
   const [question, setQuestion] = useState('');
@@ -44,12 +44,15 @@ export const AIChat: React.FC = () => {
           fontSize: '20px',
           fontWeight: 600,
           letterSpacing: '-0.02em',
-          color: '#f8fafc'
+          color: 'var(--text-main)' // Global variabel
         }}>
           3. Query Engine Interactivity
         </h2>
-        <p style={{ color: '#64748b', fontSize: '13px', lineHeight: '1.5', margin: 0 }}>
-          Ställ frågor om ditt uppladdade dataset. AI-kedjan exekveras med strikt <span style={{ color: '#10b981', fontFamily: 'monospace' }}>PromptBuilder</span> och <span style={{ color: '#10b981', fontFamily: 'monospace' }}>ResponseParser</span>-validering.
+        <p style={{ color: 'var(--text-muted)', fontSize: '13px', lineHeight: '1.5', margin: 0 }}>
+          Ställ frågor om ditt uppladdade dataset. AI-kedjan exekveras med strikt
+          <span style={{ color: 'var(--success)', fontFamily: 'monospace' }}> PromptBuilder </span>
+          och
+          <span style={{ color: 'var(--success)', fontFamily: 'monospace' }}> ResponseParser</span>-validering.
         </p>
       </div>
 
@@ -65,38 +68,30 @@ export const AIChat: React.FC = () => {
             flex: 1,
             padding: '12px 16px',
             borderRadius: '10px',
-            background: 'rgba(255, 255, 255, 0.02)',
-            border: '1px solid rgba(255, 255, 255, 0.08)',
-            color: '#f8fafc',
+            background: 'var(--bg-app)',
+            border: '1px solid var(--border-color)',
+            color: 'var(--text-main)',
             fontSize: '14px',
             outline: 'none',
             transition: 'all 0.2s ease',
-            boxShadow: 'inset 0 2px 4px rgba(0, 0, 0, 0.2)'
-          }}
-          onFocus={(e) => {
-            e.currentTarget.style.borderColor = 'rgba(16, 185, 129, 0.3)';
-            e.currentTarget.style.boxShadow = '0 0 10px rgba(16, 185, 129, 0.05), inset 0 2px 4px rgba(0, 0, 0, 0.2)';
-          }}
-          onBlur={(e) => {
-            e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.08)';
+            boxShadow: 'inset 0 2px 4px rgba(0, 0, 0, 0.1)'
           }}
         />
         <motion.button
           type="submit"
           disabled={loading}
-          whileHover={loading ? {} : { scale: 1.02, boxShadow: '0 4px 20px rgba(16, 185, 129, 0.4)' }}
+          whileHover={loading ? {} : { scale: 1.02 }}
           whileTap={loading ? {} : { scale: 0.98 }}
           style={{
             padding: '12px 24px',
-            background: loading ? '#1e293b' : 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+            background: loading ? 'var(--text-disabled)' : 'var(--primary)',
             color: '#fff',
             fontWeight: 600,
             fontSize: '14px',
             border: 'none',
             borderRadius: '10px',
             cursor: loading ? 'not-allowed' : 'pointer',
-            boxShadow: loading ? 'none' : '0 4px 12px rgba(16, 185, 129, 0.2)',
-            outline: 'none'
+            transition: 'all 0.2s ease'
           }}
         >
           {loading ? 'Tänker...' : 'Fråga'}
@@ -115,9 +110,9 @@ export const AIChat: React.FC = () => {
             <div style={{
               marginBottom: '20px',
               padding: '14px 16px',
-              background: 'rgba(239, 68, 68, 0.07)',
-              color: '#fca5a5',
-              border: '1px solid rgba(239, 68, 68, 0.2)',
+              background: 'rgba(239, 68, 68, 0.1)',
+              color: 'var(--error)',
+              border: '1px solid var(--error)',
               borderRadius: '10px',
               fontSize: '13px'
             }}>
@@ -128,7 +123,7 @@ export const AIChat: React.FC = () => {
       </AnimatePresence>
 
       {/* Chatthistorik-ström */}
-      <div style={{
+      <div className="custom-scrollbar" style={{
         display: 'flex',
         flexDirection: 'column',
         gap: '20px',
@@ -137,14 +132,12 @@ export const AIChat: React.FC = () => {
         paddingRight: '4px'
       }}>
         <AnimatePresence mode="popLayout">
-          {/* Subtil animation på lastindikatorn */}
           {loading && (
             <motion.div
               key="loader"
-              initial={{ opacity: 0, scale: 0.98, y: 10 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.98, y: -10 }}
-              transition={{ duration: 0.2 }}
+              initial={{ opacity: 0, scale: 0.98 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0 }}
             >
               <SkeletonLoader variant="ai-chat" />
             </motion.div>
@@ -152,68 +145,48 @@ export const AIChat: React.FC = () => {
 
           {chatHistory.map((chat, idx) => (
             <motion.div
-              key={chat.question + idx} // Kombinerat unikt index för stabil layout-tracking
-              layout // Flyttar gamla meddelanden nedåt i en mjuk glidande rörelse
-              initial={{ opacity: 0, y: 20, scale: 0.97 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              transition={{
-                type: 'spring',
-                stiffness: 350,
-                damping: 28
-              }}
+              key={chat.question + idx}
+              layout
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
               style={{
-                background: 'rgba(255, 255, 255, 0.01)',
-                border: '1px solid rgba(255, 255, 255, 0.03)',
+                background: 'var(--bg-card)',
+                border: '1px solid var(--border-color)',
                 borderRadius: '12px',
                 padding: '16px',
                 display: 'flex',
                 flexDirection: 'column',
-                gap: '12px',
-                boxSizing: 'border-box'
+                gap: '12px'
               }}
             >
-              {/* Användarens fråga */}
-              <div style={{ fontSize: '14px', color: '#94a3b8', display: 'flex', gap: '6px' }}>
-                <span style={{ color: '#38bdf8', fontWeight: 'bold' }}>Fråga:</span>
-                <span style={{ color: '#e2e8f0', fontWeight: 500 }}>{chat.question}</span>
+              <div style={{ fontSize: '14px', color: 'var(--text-muted)', display: 'flex', gap: '6px' }}>
+                <span style={{ color: 'var(--primary)', fontWeight: 'bold' }}>Fråga:</span>
+                <span style={{ color: 'var(--text-main)' }}>{chat.question}</span>
               </div>
 
-              {/* Oraklets svar */}
               <div style={{
-                color: '#ecfdf5',
-                background: 'rgba(16, 185, 129, 0.03)',
+                color: 'var(--text-main)',
+                background: 'rgba(16, 185, 129, 0.05)',
                 padding: '14px',
                 borderRadius: '10px',
-                border: '1px solid rgba(16, 185, 129, 0.1)',
+                border: '1px solid var(--border-color)',
                 fontSize: '14px',
                 lineHeight: '1.6'
               }}>
-                <span style={{ color: '#10b981', fontWeight: 700, marginRight: '6px' }}>🔮 Svar:</span>
+                <span style={{ color: 'var(--success)', fontWeight: 700, marginRight: '6px' }}>🔮 Svar:</span>
                 {chat.answer}
               </div>
 
-              {/* Kedjans interna resonemang (Chain-of-Thought) */}
               {chat.reasoning && (
                 <div style={{
                   fontSize: '12px',
-                  color: '#64748b',
-                  background: '#020617',
-                  border: '1px dashed rgba(255, 255, 255, 0.05)',
+                  color: 'var(--text-muted)',
+                  background: 'var(--bg-app)',
+                  border: '1px dashed var(--border-color)',
                   padding: '12px',
-                  borderRadius: '8px',
-                  lineHeight: '1.5'
+                  borderRadius: '8px'
                 }}>
-                  <div style={{
-                    fontFamily: 'monospace',
-                    color: '#475569',
-                    fontSize: '11px',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.05em',
-                    marginBottom: '6px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px'
-                  }}>
+                  <div style={{ fontFamily: 'monospace', fontSize: '11px', textTransform: 'uppercase', marginBottom: '6px' }}>
                     🧠 chain_of_thought_telemetry
                   </div>
                   <span style={{ fontStyle: 'italic' }}>{chat.reasoning}</span>

@@ -2,12 +2,16 @@ import React, { useState } from 'react';
 import { dataApi } from '../api/endpoints';
 import { AIResponse } from '../types';
 import { SkeletonLoader } from './SkeletonLoader';
+import { useToast } from '../context/ToastContext';
+
 
 export const AIChat: React.FC = () => {
   const [question, setQuestion] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [chatHistory, setChatHistory] = useState<AIResponse[]>([]);
+
+  const { showToast } = useToast(); // 2. Aktivera toas-triggern
 
   const handleAsk = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -20,10 +24,12 @@ export const AIChat: React.FC = () => {
       const result = await dataApi.askAI(question);
       setChatHistory(prev => [result, ...prev]);
       setQuestion('');
+      showToast('Svar genererat från Oraklet.', 'success'); // 3. Notifiera framgång
     } catch (err: unknown) {
       const error = err as { response?: { data?: { message?: string; }; }; };
       const backendMessage = error.response?.data?.message || 'Kunde inte kommunicera med Oraklet.';
       setError(backendMessage);
+      showToast(backendMessage, 'error'); // 4. Skicka backend-felet live till hörnet!
     } finally {
       setLoading(false);
     }

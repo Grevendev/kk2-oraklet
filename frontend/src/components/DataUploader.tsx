@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { dataApi } from '../api/endpoints';
 import { UploadResponse } from '../types';
 import { SkeletonLoader } from './SkeletonLoader';
+import { useToast } from '../context/ToastContext';
 
 interface DataUploaderProps {
   onUploadSuccess: (data: UploadResponse) => void;
@@ -14,6 +15,7 @@ export const DataUploader: React.FC<DataUploaderProps> = ({ onUploadSuccess, onF
   const [uploadedFile, setUploadedFile] = useState<{ name: string; size: number; } | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { showToast } = useToast();
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -30,16 +32,24 @@ export const DataUploader: React.FC<DataUploaderProps> = ({ onUploadSuccess, onF
       const response = await dataApi.upload(file);
       setUploadedFile({ name: file.name, size: file.size });
       onUploadSuccess(response);
+
+      // Dynamisk framgångs-toast med filnamn
+      showToast(`Injustering lyckades: ${file.name} monterad.`, 'success');
+
     } catch (err: unknown) {
       const error = err as { response?: { data?: { message?: string; }; }; message?: string; };
+      let backendMessage = 'Anslutningsfel mot valideringsklustret eller oväntat valideringsfel.';
 
       if (error.response?.data?.message) {
-        setError(error.response.data.message);
+        backendMessage = error.response.data.message;
       } else if (error.message) {
-        setError(error.message);
-      } else {
-        setError('Anslutningsfel mot valideringsklustret eller oväntat valideringsfel.');
+        backendMessage = error.message;
       }
+
+      setError(backendMessage);
+
+      // Skickar det exakta felmeddelandet från backend till toast-notifieringen
+      showToast(backendMessage, 'error');
     } finally {
       setLoading(false);
     }
@@ -51,6 +61,9 @@ export const DataUploader: React.FC<DataUploaderProps> = ({ onUploadSuccess, onF
 
     setUploadedFile(null);
     onFileReset();
+
+    // Diskret notifiering att filen tagits bort
+    showToast('Datasetet har avmonterats.', 'info');
 
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
@@ -82,7 +95,7 @@ export const DataUploader: React.FC<DataUploaderProps> = ({ onUploadSuccess, onF
           flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
-          padding: loading ? '10px' : '40px 20px', // Krymper paddingen något under loading för att matcha skelettets storlek perfekt
+          padding: loading ? '10px' : '40px 20px',
           background: loading
             ? 'transparent'
             : uploadedFile
@@ -125,10 +138,8 @@ export const DataUploader: React.FC<DataUploaderProps> = ({ onUploadSuccess, onF
 
         {/* Dynamiskt UI-innehåll baserat på status: LOADING -> UPLOADED -> DEFAULT */}
         {loading ? (
-          // Injekterar den pulserande rutan för filanalys
           <SkeletonLoader variant="uploader-progress" />
         ) : uploadedFile ? (
-          /* DET FINARE LÄGET NÄR EN FIL ÄR UPPLADDAD */
           <div style={{
             display: 'flex',
             alignItems: 'center',
@@ -197,7 +208,6 @@ export const DataUploader: React.FC<DataUploaderProps> = ({ onUploadSuccess, onF
             </button>
           </div>
         ) : (
-          /* UTGÅNGSLÄGET */
           <div style={{ textAlign: 'center' }}>
             <div style={{ fontSize: '28px', marginBottom: '12px', opacity: 0.7 }}>
               📁

@@ -13,19 +13,19 @@ export const OracleBrandIdentity: React.FC = () => {
         position: 'relative',
         width: '28px',
         height: '28px',
-        background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+        background: 'linear-gradient(135deg, var(--success) 0%, #059669 100%)',
         borderRadius: '8px',
         transform: 'rotate(45deg)',
-        boxShadow: '0 0 16px rgba(16, 185, 129, 0.25)',
+        boxShadow: '0 0 16px var(--shadow-glow)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center'
       }}>
-        {/* Inre glödande kärna */}
+        {/* Inre glödande kärna - här använder vi --bg-app för att "klippa ut" kärnan mot bakgrunden */}
         <div style={{
           width: '10px',
           height: '10px',
-          background: '#020617',
+          background: 'var(--bg-app)',
           borderRadius: '3px',
           transform: 'rotate(-45deg)'
         }} />
@@ -37,15 +37,15 @@ export const OracleBrandIdentity: React.FC = () => {
           fontSize: '18px',
           fontWeight: 800,
           letterSpacing: '0.08em',
-          color: '#f8fafc',
+          color: 'var(--text-main)',
           fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
         }}>
-          ORACLE<span style={{ color: '#10b981' }}>.</span>CORE
+          ORACLE<span style={{ color: 'var(--success)' }}>.</span>CORE
         </span>
         <span style={{
           fontSize: '9px',
           fontFamily: 'monospace',
-          color: '#475569',
+          color: 'var(--text-muted)',
           letterSpacing: '0.18em',
           marginTop: '3px',
           textTransform: 'uppercase'

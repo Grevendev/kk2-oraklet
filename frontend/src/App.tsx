@@ -31,9 +31,55 @@ export default function App() {
   };
 
   return (
-    <div style={{ display: 'flex', width: '100vw', height: '100vh', background: '#090d16', overflow: 'hidden' }}>
+    <div style={{
+      display: 'flex',
+      width: '100%', // Ändrat från 100vw till 100% för att förhindra horisontell scroll
+      height: '100vh',
+      background: '#090d16',
+      overflowX: 'hidden' // Blockerar all sido-förflyttning helt
+    }}>
 
-      {/* VÄNSTER SIDA: Minnesdashboard (Sidebar numera placerad först) */}
+      {/* ─── INJICERAD CSS FÖR RESPONSIVITET OCH GÖMDA SCROLLISTER ─── */}
+      <style>{`
+        /* Göm webbläsarens yttre standard-scrollbar helt från fönsterkanten */
+        html, body {
+          margin: 0;
+          padding: 0;
+          width: 100%;
+          height: 100vh;
+          overflow: hidden;
+        }
+
+        /* Dölj scrollbar helt för vänstersidan (Sidebar) */
+        .hide-scrollbar {
+          scrollbar-width: none; /* Firefox */
+          -ms-overflow-style: none; /* IE/Edge */
+        }
+        .hide-scrollbar::-webkit-scrollbar {
+          display: none; /* Chrome, Safari, Opera */
+        }
+
+        /* Tunn, lyxig scrollbar för högersidan (Huvudinnehållet) */
+        .custom-scrollbar {
+          scrollbar-width: thin;
+          scrollbar-color: rgba(255, 255, 255, 0.05) transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+          width: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background: rgba(255, 255, 255, 0.04);
+          border-radius: 10px;
+        }
+        .custom-scrollbar:hover::-webkit-scrollbar-thumb {
+          background: rgba(255, 255, 255, 0.12);
+        }
+      `}</style>
+
+      {/* VÄNSTER SIDA: Minnesdashboard */}
       <Sidebar
         sessions={sessions}
         currentSessionId={currentSessionId}
@@ -45,16 +91,18 @@ export default function App() {
         }}
       />
 
-      {/* HÖGER SIDA: Din huvudsakliga Dashboard */}
+      {/* HÖGER SIDA: Huvud-Dashboard (Helt responsiv flexbox) */}
       <div className="custom-scrollbar" style={{
         flex: 1,
         fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
         color: '#f8fafc',
-        padding: '60px 40px',
+        padding: '40px 20px', // Något mindre padding för bättre responsivitet på mindre skärmar
         letterSpacing: '-0.01em',
-        overflowY: 'auto'
+        overflowY: 'auto',
+        overflowX: 'hidden', // Säkerställer att inte heller innehållet trycker ut sidan i sidled
+        boxSizing: 'border-box'
       }}>
-        <div style={{ maxWidth: '1100px', margin: '0 auto' }}>
+        <div style={{ maxWidth: '1100px', margin: '0 auto', width: '100%' }}>
 
           {/* Premium Header */}
           <header style={{
@@ -67,12 +115,12 @@ export default function App() {
             flexWrap: 'wrap',
             gap: '20px'
           }}>
-            <div>
+            <div style={{ flex: '1 1 300px' }}>
               <div style={{ margin: '10px 0 20px 0' }}>
                 <OracleBrandIdentity />
               </div>
               <p style={{
-                fontSize: '15px',
+                fontSize: '14px',
                 color: '#64748b',
                 fontWeight: 500,
                 margin: 0,
@@ -83,13 +131,13 @@ export default function App() {
               </p>
             </div>
 
-            <div style={{ minWidth: '240px' }}>
+            <div style={{ minWidth: '240px', flex: '0 1 auto' }}>
               <CircuitBreakerStatus />
             </div>
           </header>
 
           {/* Dashboard Layout Grid */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '32px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '32px', width: '100%' }}>
 
             {/* Sektion 1: Ingestering */}
             <section style={{
@@ -97,7 +145,8 @@ export default function App() {
               borderRadius: '16px',
               border: '1px solid rgba(255, 255, 255, 0.05)',
               padding: '24px',
-              boxShadow: '0 4px 30px rgba(0, 0, 0, 0.2)'
+              boxShadow: '0 4px 30px rgba(0, 0, 0, 0.2)',
+              boxSizing: 'border-box'
             }}>
               <DataUploader
                 onUploadSuccess={(data) => {
@@ -118,7 +167,8 @@ export default function App() {
                 boxShadow: '0 10px 40px rgba(0,0,0,0.3)',
                 display: 'flex',
                 flexDirection: 'column',
-                gap: '16px'
+                gap: '16px',
+                boxSizing: 'border-box'
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                   <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10b981', boxShadow: '0 0 12px #10b981' }} />
@@ -127,46 +177,57 @@ export default function App() {
                   </h3>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: '16px', fontSize: '14px' }}>
-                  <div style={{ color: '#64748b' }}>Total Records:</div>
-                  <div style={{ fontWeight: 600, color: '#e2e8f0' }}>{currentDataset.rows.toLocaleString()} rader</div>
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))',
+                  gap: '16px',
+                  fontSize: '14px'
+                }}>
+                  <div>
+                    <div style={{ color: '#64748b', marginBottom: '4px' }}>Total Records:</div>
+                    <div style={{ fontWeight: 600, color: '#e2e8f0' }}>{currentDataset.rows.toLocaleString()} rader</div>
+                  </div>
 
-                  <div style={{ color: '#64748b' }}>Schema Columns:</div>
-                  <div style={{
-                    display: 'flex',
-                    flexWrap: 'wrap',
-                    gap: '6px',
-                    fontFamily: 'monospace',
-                    fontSize: '12px'
-                  }}>
-                    {currentDataset.columns.map((col, idx) => (
-                      <span key={idx} style={{
-                        background: 'rgba(255,255,255,0.05)',
-                        padding: '2px 8px',
-                        borderRadius: '4px',
-                        border: '1px solid rgba(255,255,255,0.05)',
-                        color: '#94a3b8'
-                      }}>
-                        {col}
-                      </span>
-                    ))}
+                  <div>
+                    <div style={{ color: '#64748b', marginBottom: '8px' }}>Schema Columns:</div>
+                    <div style={{
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      gap: '6px',
+                      fontFamily: 'monospace',
+                      fontSize: '12px'
+                    }}>
+                      {currentDataset.columns.map((col, idx) => (
+                        <span key={idx} style={{
+                          background: 'rgba(255,255,255,0.05)',
+                          padding: '2px 8px',
+                          borderRadius: '4px',
+                          border: '1px solid rgba(255,255,255,0.05)',
+                          color: '#94a3b8'
+                        }}>
+                          {col}
+                        </span>
+                      ))}
+                    </div>
                   </div>
                 </div>
               </section>
             )}
 
-            {/* Sektion 3 & 4: Delad layout */}
+            {/* Sektion 3 & 4: Delad grid med flexibel brytpunkt */}
             <div style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(450px, 1fr))',
-              gap: '32px'
+              gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', // Justerad minmax från 450px till 320px för mycket bättre mobil/smal-skärms-responsivitet
+              gap: '32px',
+              width: '100%'
             }}>
               <section style={{
                 background: '#0f172a',
                 borderRadius: '16px',
                 border: '1px solid rgba(255, 255, 255, 0.05)',
                 padding: '24px',
-                boxShadow: '0 4px 30px rgba(0, 0, 0, 0.2)'
+                boxShadow: '0 4px 30px rgba(0, 0, 0, 0.2)',
+                boxSizing: 'border-box'
               }}>
                 <StatsDashboard />
               </section>
@@ -176,7 +237,8 @@ export default function App() {
                 borderRadius: '16px',
                 border: '1px solid rgba(255, 255, 255, 0.05)',
                 padding: '24px',
-                boxShadow: '0 4px 30px rgba(0, 0, 0, 0.2)'
+                boxShadow: '0 4px 30px rgba(0, 0, 0, 0.2)',
+                boxSizing: 'border-box'
               }}>
                 <AIChat />
               </section>

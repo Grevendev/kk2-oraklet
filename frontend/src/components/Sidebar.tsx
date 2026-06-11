@@ -29,7 +29,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         onClick={() => setIsOpen(true)}
         style={{
           position: 'fixed',
-          left: '20px', // Justerad till vänster
+          left: '20px',
           top: '20px',
           zIndex: 50,
           background: '#0f172a',
@@ -53,14 +53,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <div style={{
-      width: '300px',
+      width: '280px',
+      minWidth: '280px', // Hindrar sidopanelen från att pressas ihop på mindre skärmar
       height: '100vh',
       background: '#050b14',
-      borderRight: '1px solid rgba(255, 255, 255, 0.05)', // Ändrat till borderRight
+      borderRight: '1px solid rgba(255, 255, 255, 0.05)',
       display: 'flex',
       flexDirection: 'column',
       padding: '20px',
-      boxShadow: '4px 0 30px rgba(0,0,0,0.4)', // Kastar skugga åt höger istället
+      boxShadow: '4px 0 30px rgba(0,0,0,0.4)',
       boxSizing: 'border-box'
     }}>
       {/* Top Kontroller */}
@@ -117,9 +118,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
         }}
       />
 
-      {/* Lista över sparade händelser med osynlig/tunn scroll */}
+      {/* Lista med GÖMD scrollbar */}
       <div
-        className="custom-scrollbar"
+        className="hide-scrollbar" // Lägger till klassen som dödar scrollbaren helt
         style={{
           flex: 1,
           overflowY: 'auto',

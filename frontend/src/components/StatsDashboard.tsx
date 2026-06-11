@@ -33,7 +33,7 @@ export const StatsDashboard: React.FC = () => {
   const chartData = useMemo(() => {
     const rawStats = statsData?.stats || {};
     return Object.entries(rawStats)
-      .filter(([_key, metrics]) => metrics && typeof metrics.mean === 'number')
+      .filter(([, metrics]) => metrics && typeof metrics.mean === 'number')
       .map(([columnName, metrics]) => ({
         name: columnName,
         "Medelvärde": Number(metrics.mean.toFixed(2)),

@@ -16,7 +16,7 @@ export const Settings: React.FC = () => {
       {/* Inställningar Huvudknapp */}
       <motion.button
         onClick={() => setExpanded(!expanded)}
-        whileHover={{ scale: 1.02, background: 'rgba(255,255,255,0.02)' }}
+        whileHover={{ scale: 1.02, background: 'var(--bg-accent-light)' }}
         whileTap={{ scale: 0.98 }}
         style={{
           width: '100%',
@@ -70,7 +70,7 @@ export const Settings: React.FC = () => {
                   style={{
                     width: '44px',
                     height: '24px',
-                    background: theme === 'dark' ? '#38bdf8' : '#cbd5e1',
+                    background: theme === 'dark' ? 'var(--accent)' : 'var(--border-color)',
                     borderRadius: '12px',
                     padding: '2px',
                     cursor: 'pointer',
@@ -88,7 +88,7 @@ export const Settings: React.FC = () => {
                       width: '20px',
                       height: '20px',
                       borderRadius: '50%',
-                      background: '#ffffff',
+                      background: 'var(--bg-app)',
                       boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
                       display: 'flex',
                       alignItems: 'center',

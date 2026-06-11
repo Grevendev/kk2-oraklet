@@ -4,6 +4,7 @@ import { StatsResponse } from '../types';
 // Importera Recharts-komponenter för diagrammet
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, CartesianGrid } from 'recharts';
 import { SkeletonLoader } from './SkeletonLoader';
+
 export const StatsDashboard: React.FC = () => {
   const [statsData, setStatsData] = useState<StatsResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -118,11 +119,9 @@ export const StatsDashboard: React.FC = () => {
           ⚠️ {error}
         </div>
       )}
-      {loading && (
-        <div style={{ marginTop: '20px' }}>
-          <SkeletonLoader />
-        </div>
-      )}
+
+      {/* Skräddarsydd skeleton loader för statistikpaneler */}
+      {loading && <SkeletonLoader variant="dashboard-stats" />}
 
       {/* Trygg typsäkrad rendering via chartData-kontroll */}
       {!loading && statsData && chartData.length > 0 && (

@@ -1,74 +1,65 @@
 /* ==========================================================================
-   1. DESIGN SYSTEM & TEMAVARIABLER (Light / Dark Mode)
+   1. DESIGN SYSTEM & TEMAVARIABLER
    ========================================================================== */
 
 :root {
-  /* Färgpalett för standardmörkt läge (Premium Cyber-look) */
+  /* Grundfärger (Dark Mode) */
   --bg-app: #020617;
-  /* Slate 950 */
   --bg-sidebar: #050b14;
-  /* Deep custom dark */
   --bg-card: #0b1329;
-  /* Mellanmörk panel */
 
+  /* Text */
   --text-main: #f8fafc;
-  /* Slate 50 */
   --text-muted: #64748b;
-  /* Slate 500 */
   --text-disabled: #334155;
-  /* Slate 700 */
 
+  /* Borders & Shadows */
   --border-color: rgba(255, 255, 255, 0.05);
   --border-focus: rgba(168, 85, 247, 0.4);
-  /* Lila accent */
+  --shadow-glow: rgba(56, 189, 248, 0.15);
 
-  /* Accentfärger */
-  --primary: #38bdf8;
+  /* Semantiska Accenter */
+  --accent: #38bdf8;
   /* Sky 400 */
+  --bg-accent-light: rgba(56, 189, 248, 0.08);
+  --secondary: #a855f7;
+  /* Purple 500 */
   --success: #10b981;
-  /* Emerald 500 */
   --error: #ef4444;
-  /* Red 500 */
   --warning: #f59e0b;
-  /* Amber 500 */
   --info: #3b82f6;
-  /* Blue 500 */
 }
 
 :root.light-mode {
-  /* Färgpalett för ljust läge (Klar och ren UI) */
+  /* Grundfärger (Light Mode) */
   --bg-app: #f8fafc;
-  /* Slate 50 */
   --bg-sidebar: #f1f5f9;
-  /* Slate 100 */
   --bg-card: #ffffff;
-  /* Ren vit */
 
+  /* Text */
   --text-main: #0f172a;
-  /* Slate 900 */
   --text-muted: #64748b;
-  /* Slate 500 */
   --text-disabled: #cbd5e1;
-  /* Slate 300 */
 
-  --border-color: rgba(0, 0, 0, 0.08);
+  /* Borders & Shadows */
+  --border-color: rgba(0, 0, 0, 0.1);
   --border-focus: rgba(168, 85, 247, 0.5);
+  --shadow-glow: rgba(56, 189, 248, 0.2);
 
-  /* Justerade accenter för bättre kontrast på ljus bakgrund */
-  --primary: #0284c7;
+  /* Semantiska Accenter */
+  --accent: #0284c7;
   /* Sky 600 */
+  --bg-accent-light: rgba(2, 132, 199, 0.08);
+  --secondary: #9333ea;
+  /* Purple 600 */
   --success: #15803d;
-  /* Green 700 */
   --error: #b91c1c;
-  /* Red 700 */
   --warning: #b45309;
-  /* Amber 700 */
   --info: #1d4ed8;
-  /* Blue 700 */
 }
 
 /* ==========================================================================
-   2. GLOBAL ÅTERSTÄLLNING (CSS Reset)
+   2. GLOBAL ÅTERSTÄLLNING & ANIMATIONER
    ========================================================================== */
 
 html,
@@ -80,13 +71,20 @@ body,
   height: 100%;
   background-color: var(--bg-app);
   color: var(--text-main);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji';
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  text-rendering: optimizeLegibility;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   transition: background-color 0.3s ease, color 0.3s ease;
   overflow: hidden;
-  /* Låter komponenter (t.ex. main layout) styra sina egna scroll-scopes */
+}
+
+/* Spin-animation för laddningsikoner */
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 *,
@@ -95,90 +93,9 @@ body,
   box-sizing: border-box;
 }
 
-/* Snabba fixar för interaktiva element */
-input,
-button,
-textarea,
-select {
-  font-family: inherit;
-  font-size: inherit;
-}
+/* ... (Behåll dina existerande .hide-scrollbar och scrollbar-stilar här) ... */
 
-a {
-  color: var(--primary);
-  text-decoration: none;
-}
-
-a:hover {
-  text-decoration: underline;
-}
-
-/* ==========================================================================
-   3. SYSTEM- OCH HJÄLPKLASSER
-   ========================================================================== */
-
-/* Gömer scrollbars men behåller funktionalitet för t.ex. historiklistan */
-.hide-scrollbar {
-  -ms-overflow-style: none;
-  /* IE and Edge */
-  scrollbar-width: none;
-  /* Firefox */
-}
-
-.hide-scrollbar::-webkit-scrollbar {
-  display: none;
-  /* Chrome, Safari and Opera */
-}
-
-/* Globalt stajlad scrollbar för områden som faktiskt ska synas */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-::-webkit-scrollbar-thumb {
-  background: var(--border-color);
-  border-radius: 9999px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: var(--text-muted);
-}
-
-/* Monospace text-styling för kod/system-loggar */
 code,
 pre {
-  font-family: 'Fira Code', 'Courier New', Courier, monospace;
-}
-
-/* Snygg mikro-shimmer effekt som kan användas för Skeleton-laddare */
-@keyframes shimmer {
-  0% {
-    background-position: -200% 0;
-  }
-
-  100% {
-    background-position: 200% 0;
-  }
-}
-
-.shimmer-effect {
-  background: linear-gradient(90deg,
-      rgba(255, 255, 255, 0.01) 25%,
-      rgba(255, 255, 255, 0.05) 50%,
-      rgba(255, 255, 255, 0.01) 75%);
-  background-size: 200% 100%;
-  animation: shimmer 1.6s infinite linear;
-}
-
-.light-mode .shimmer-effect {
-  background: linear-gradient(90deg,
-      rgba(0, 0, 0, 0.03) 25%,
-      rgba(0, 0, 0, 0.08) 50%,
-      rgba(0, 0, 0, 0.03) 75%);
-  background-size: 200% 100%;
+  font-family: 'Fira Code', 'Courier New', monospace;
 }

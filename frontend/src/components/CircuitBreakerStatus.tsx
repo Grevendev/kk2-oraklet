@@ -1,41 +1,59 @@
 import React, { useState, useEffect } from 'react';
+import { useToast } from '../context/ToastContext'; // 1. Importera global toast-hook
 
 export const CircuitBreakerStatus: React.FC = () => {
   const [status, setStatus] = useState<{
     isOpen: boolean;
     message: string;
     retryAfter: number;
-    initialRetryAfter: number; // Sparar startvärdet för att kunna räkna ut procent till progress baren
+    initialRetryAfter: number;
   } | null>(null);
+
+  const { showToast } = useToast(); // 2. Initiera toasten
 
   useEffect(() => {
     const handleTriggered = (event: Event) => {
       const customEvent = event as CustomEvent;
       const retry = customEvent.detail.retryAfter || 10;
+      const triggerMessage = customEvent.detail.message || 'Systemets säkring har löst ut (Circuit Breaker OPEN).';
+
       setStatus({
         isOpen: true,
-        message: customEvent.detail.message || 'Systemets säkring har löst ut (Circuit Breaker OPEN).',
+        message: triggerMessage,
         retryAfter: retry,
         initialRetryAfter: retry
       });
+
+      // 3. Skjut en omedelbar röd varningstoast när kaskadskyddet aktiveras
+      showToast(`Kritisk incident: AI-säkringen har löst ut. Pipeline isolerad.`, 'error');
     };
 
     window.addEventListener('circuit-breaker-triggered', handleTriggered);
     return () => window.removeEventListener('circuit-breaker-triggered', handleTriggered);
-  }, []);
+  }, [showToast]);
 
   // Räkna ner timern varje sekund om den är öppen
   useEffect(() => {
     if (!status || status.retryAfter <= 0) return;
 
     const timer = setTimeout(() => {
-      setStatus(prev => prev ? { ...prev, retryAfter: prev.retryAfter - 1 } : null);
+      setStatus(prev => {
+        if (!prev) return null;
+
+        const nextRetry = prev.retryAfter - 1;
+
+        // 4. PRECIS när timern slår om till noll (och komponenten blir grön), skjut en framgångstoast!
+        if (nextRetry <= 0) {
+          showToast('AI Pipeline Security Layer har återställts. Systemet är ONLINE.', 'success');
+        }
+
+        return { ...prev, retryAfter: nextRetry };
+      });
     }, 1000);
 
     return () => clearTimeout(timer);
-  }, [status]);
+  }, [status, showToast]);
 
-  // Om allt är grönt (stängt), visar vi en diskret, lyxig och stabil systemstatus istället för ingenting alls!
   if (!status || status.retryAfter <= 0) {
     return (
       <div style={{
@@ -43,7 +61,7 @@ export const CircuitBreakerStatus: React.FC = () => {
         alignItems: 'center',
         justifyContent: 'space-between',
         padding: '12px 16px',
-        background: 'rgba(16, 185, 129, 0.03)', // Extremt dämpad grön glöd
+        background: 'rgba(16, 185, 129, 0.03)',
         border: '1px solid rgba(16, 185, 129, 0.15)',
         borderRadius: '12px',
         fontSize: '13px'
@@ -65,23 +83,19 @@ export const CircuitBreakerStatus: React.FC = () => {
     );
   }
 
-  // Räkna ut hur många procent av återhämtningen som återstår
   const progressPercent = (status.retryAfter / status.initialRetryAfter) * 100;
 
-  // SYSTEM TRIPPAT: Visar den lyxiga, strömlinjeformade kris-indikatorn
   return (
     <div style={{
       display: 'flex',
       flexDirection: 'column',
       gap: '12px',
       padding: '16px',
-      background: 'rgba(239, 68, 68, 0.04)', // Lyxig mörkröd transparent botten
-      border: '1px solid rgba(239, 68, 68, 0.25)', // Tydlig men mjuk röd glöd-kant
+      background: 'rgba(239, 68, 68, 0.04)',
+      border: '1px solid rgba(239, 68, 68, 0.25)',
       borderRadius: '12px',
       boxShadow: '0 4px 24px rgba(239, 68, 68, 0.05)'
     }}>
-
-      {/* Övre raden: Meddelande och pulserande status */}
       <div style={{
         display: 'flex',
         alignItems: 'flex-start',
@@ -90,7 +104,6 @@ export const CircuitBreakerStatus: React.FC = () => {
         flexWrap: 'wrap'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          {/* Pulserande röd varningslampa */}
           <span style={{
             width: '10px',
             height: '10px',
@@ -104,7 +117,6 @@ export const CircuitBreakerStatus: React.FC = () => {
           </span>
         </div>
 
-        {/* Monospace Countdown */}
         <div style={{
           fontFamily: '"Fira Code", "Courier New", monospace',
           fontSize: '11px',
@@ -119,12 +131,10 @@ export const CircuitBreakerStatus: React.FC = () => {
         </div>
       </div>
 
-      {/* Undre raden: Förklarande text */}
       <p style={{ color: '#94a3b8', fontSize: '13px', margin: 0, lineHeight: '1.5' }}>
         Tjänsten har tillfälligt brutit strömmen till AI-kedjan för att förhindra kaskadfel och skydda CPU-resurser. Automatisk återanslutning pågår.
       </p>
 
-      {/* Premium Framstegsindikator (Progress bar) */}
       <div style={{
         width: '100%',
         height: '4px',
@@ -138,7 +148,7 @@ export const CircuitBreakerStatus: React.FC = () => {
           height: '100%',
           background: 'linear-gradient(to right, #ef4444, #f43f5e)',
           borderRadius: '2px',
-          transition: 'width 1s linear' // Ger en mjuk, rullande nedräkningseffekt i animationen
+          transition: 'width 1s linear'
         }} />
       </div>
     </div>

@@ -3,7 +3,7 @@ import { dataApi } from '../api/endpoints';
 import { UploadResponse } from '../types';
 import { SkeletonLoader } from './SkeletonLoader';
 import { useToast } from '../context/ToastContext';
-import { motion, AnimatePresence } from 'framer-motion'; // Importera Framer Motion
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface DataUploaderProps {
   onUploadSuccess: (data: UploadResponse) => void;
@@ -14,7 +14,7 @@ export const DataUploader: React.FC<DataUploaderProps> = ({ onUploadSuccess, onF
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [uploadedFile, setUploadedFile] = useState<{ name: string; size: number; } | null>(null);
-  const [isDragging, setIsDragging] = useState(false); // Nytt tillstånd för drag-interaktion
+  const [isDragging, setIsDragging] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { showToast } = useToast();
@@ -65,7 +65,6 @@ export const DataUploader: React.FC<DataUploaderProps> = ({ onUploadSuccess, onF
     }
   };
 
-  // Drag & drop triggers
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     if (!loading && !uploadedFile) setIsDragging(true);
@@ -98,16 +97,16 @@ export const DataUploader: React.FC<DataUploaderProps> = ({ onUploadSuccess, onF
           fontSize: '20px',
           fontWeight: 600,
           letterSpacing: '-0.02em',
-          color: '#f8fafc'
+          color: 'var(--text-main)'
         }}>
           1. Data Ingestion Stream
         </h2>
-        <p style={{ color: '#64748b', fontSize: '13px', lineHeight: '1.5', margin: 0 }}>
-          Stöder <span style={{ fontFamily: 'monospace', color: '#a855f7' }}>.csv</span> och <span style={{ fontFamily: 'monospace', color: '#a855f7' }}>.parquet</span>. Systemet kör automatisk schema- och semantisk driftkontroll.
+        <p style={{ color: 'var(--text-muted)', fontSize: '13px', lineHeight: '1.5', margin: 0 }}>
+          Stöder <span style={{ fontFamily: 'monospace', color: 'var(--accent)' }}>.csv</span> och <span style={{ fontFamily: 'monospace', color: 'var(--accent)' }}>.parquet</span>. Systemet kör automatisk schema- och semantisk driftkontroll.
         </p>
       </div>
 
-      {/* Premium Dropzone konverterad till motion.label för hårdvaruaccelererad interpolation */}
+      {/* Premium Dropzone */}
       <motion.label
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
@@ -115,19 +114,19 @@ export const DataUploader: React.FC<DataUploaderProps> = ({ onUploadSuccess, onF
         animate={{
           scale: isDragging ? 1.015 : 1,
           backgroundColor: loading
-            ? 'rgba(0, 0, 0, 0)'
+            ? 'transparent'
             : uploadedFile
-              ? 'rgba(52, 211, 153, 0.02)'
+              ? 'var(--bg-card)'
               : isDragging
-                ? 'rgba(168, 85, 247, 0.04)'
-                : 'rgba(255, 255, 255, 0.01)',
+                ? 'var(--bg-accent-light)'
+                : 'transparent',
           borderColor: loading
-            ? 'rgba(0, 0, 0, 0)'
+            ? 'var(--border-color)'
             : uploadedFile
-              ? 'rgba(52, 211, 153, 0.3)'
+              ? 'var(--success)'
               : isDragging
-                ? 'rgba(168, 85, 247, 0.6)'
-                : 'rgba(255, 255, 255, 0.1)',
+                ? 'var(--accent)'
+                : 'var(--border-color)',
           borderStyle: uploadedFile || isDragging ? 'solid' : 'dashed'
         }}
         transition={{ type: 'spring', stiffness: 400, damping: 25 }}
@@ -137,14 +136,13 @@ export const DataUploader: React.FC<DataUploaderProps> = ({ onUploadSuccess, onF
           alignItems: 'center',
           justifyContent: 'center',
           padding: loading ? '10px' : '40px 20px',
-          borderWidth: loading ? '1px' : '2px',
+          borderWidth: '2px',
           borderRadius: '12px',
           cursor: loading ? 'not-allowed' : uploadedFile ? 'default' : 'pointer',
-          boxShadow: uploadedFile ? '0 4px 20px rgba(52, 211, 153, 0.03)' : loading ? 'none' : 'inset 0 2px 4px rgba(0, 0, 0, 0.4)',
           width: '100%',
           boxSizing: 'border-box'
         }}
-        whileHover={(!loading && !uploadedFile) ? { borderColor: 'rgba(168, 85, 247, 0.4)', backgroundColor: 'rgba(168, 85, 247, 0.02)' } : {}}
+        whileHover={(!loading && !uploadedFile) ? { borderColor: 'var(--accent)', backgroundColor: 'var(--bg-accent-light)' } : {}}
       >
         <input
           ref={fileInputRef}
@@ -177,22 +175,20 @@ export const DataUploader: React.FC<DataUploaderProps> = ({ onUploadSuccess, onF
                 display: 'flex',
                 alignItems: 'center',
                 gap: '16px',
-                background: '#020617',
-                border: '1px solid rgba(255, 255, 255, 0.05)',
+                background: 'var(--bg-app)',
+                border: '1px solid var(--border-color)',
                 padding: '14px 20px',
                 borderRadius: '10px',
                 maxWidth: '450px',
                 width: '100%',
-                boxSizing: 'border-box',
-                boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
-                cursor: 'default'
+                boxSizing: 'border-box'
               }}
             >
               <div style={{
                 width: '36px',
                 height: '36px',
                 borderRadius: '8px',
-                background: 'rgba(52, 211, 153, 0.1)',
+                background: 'var(--bg-accent-light)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -203,7 +199,7 @@ export const DataUploader: React.FC<DataUploaderProps> = ({ onUploadSuccess, onF
 
               <div style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
                 <div style={{
-                  color: '#34d399',
+                  color: 'var(--success)',
                   fontSize: '13px',
                   fontWeight: 600,
                   overflow: 'hidden',
@@ -212,24 +208,23 @@ export const DataUploader: React.FC<DataUploaderProps> = ({ onUploadSuccess, onF
                 }}>
                   {uploadedFile.name}
                 </div>
-                <div style={{ color: '#475569', fontSize: '11px', fontFamily: 'monospace', marginTop: '2px' }}>
+                <div style={{ color: 'var(--text-muted)', fontSize: '11px', fontFamily: 'monospace', marginTop: '2px' }}>
                   {(uploadedFile.size / (1024 * 1024)).toFixed(2)} MB // READY_FOR_INGESTION
                 </div>
               </div>
 
               <motion.button
                 onClick={handleClearFile}
-                whileHover={{ scale: 1.1, color: '#ef4444', backgroundColor: 'rgba(239, 68, 68, 0.07)' }}
+                whileHover={{ scale: 1.1, color: 'var(--error)' }}
                 whileTap={{ scale: 0.9 }}
                 style={{
                   background: 'transparent',
                   border: 'none',
-                  color: '#64748b',
+                  color: 'var(--text-muted)',
                   cursor: 'pointer',
                   fontSize: '16px',
                   padding: '4px 8px',
-                  borderRadius: '6px',
-                  outline: 'none'
+                  borderRadius: '6px'
                 }}
               >
                 ✕
@@ -244,15 +239,15 @@ export const DataUploader: React.FC<DataUploaderProps> = ({ onUploadSuccess, onF
               style={{ textAlign: 'center' }}
             >
               <motion.div
-                animate={isDragging ? { y: -4, scale: 1.1, color: '#a855f7' } : { y: 0, scale: 1, color: '#ffffff' }}
+                animate={isDragging ? { y: -4, scale: 1.1, color: 'var(--accent)' } : { y: 0, scale: 1, color: 'var(--text-main)' }}
                 style={{ fontSize: '28px', marginBottom: '12px', opacity: 0.7 }}
               >
                 {isDragging ? '🚀' : '📁'}
               </motion.div>
-              <div style={{ fontSize: '14px', fontWeight: 600, color: '#e2e8f0', marginBottom: '4px' }}>
+              <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-main)', marginBottom: '4px' }}>
                 {isDragging ? 'Släpp filen för att starta ingestion' : 'Välj eller släpp din datafil här'}
               </div>
-              <div style={{ fontSize: '12px', color: '#64748b' }}>
+              <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
                 Klicka för att bläddra på din hårddisk
               </div>
             </motion.div>
@@ -260,7 +255,7 @@ export const DataUploader: React.FC<DataUploaderProps> = ({ onUploadSuccess, onF
         </AnimatePresence>
       </motion.label>
 
-      {/* Sofistikerat Injusteringsfel */}
+      {/* Felhantering */}
       <AnimatePresence>
         {error && (
           <motion.div
@@ -271,9 +266,9 @@ export const DataUploader: React.FC<DataUploaderProps> = ({ onUploadSuccess, onF
           >
             <div style={{
               padding: '14px 16px',
-              background: 'rgba(239, 68, 68, 0.07)',
-              color: '#fca5a5',
-              border: '1px solid rgba(239, 68, 68, 0.2)',
+              background: 'rgba(239, 68, 68, 0.1)',
+              color: 'var(--error)',
+              border: '1px solid var(--error)',
               borderRadius: '10px',
               fontSize: '13px',
               lineHeight: '1.5'

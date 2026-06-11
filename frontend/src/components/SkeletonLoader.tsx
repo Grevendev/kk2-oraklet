@@ -1,7 +1,7 @@
 import React from 'react';
 
 interface SkeletonLoaderProps {
-  variant?: 'default' | 'dashboard-stats' | 'ai-chat';
+  variant?: 'default' | 'dashboard-stats' | 'ai-chat' | 'sidebar-items' | 'uploader-progress';
 }
 
 export const SkeletonLoader: React.FC<SkeletonLoaderProps> = ({ variant = 'default' }) => {
@@ -18,6 +18,62 @@ export const SkeletonLoader: React.FC<SkeletonLoaderProps> = ({ variant = 'defau
     `}</style>
   );
 
+  // NY VARIANT 1: Snygga rader för historik eller sidomenyer
+  if (variant === 'sidebar-items') {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%' }}>
+        {injectStyle}
+        {[1, 2, 3, 4].map((i) => (
+          <div key={i} className="pulse-element" style={{
+            height: '38px',
+            width: '100%',
+            background: 'rgba(255, 255, 255, 0.02)',
+            border: '1px solid rgba(255, 255, 255, 0.03)',
+            borderRadius: '8px',
+            padding: '0 12px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            boxSizing: 'border-box'
+          }}>
+            <div style={{ height: '10px', width: '65%', background: 'rgba(255,255,255,0.04)', borderRadius: '3px' }} />
+            <div style={{ height: '8px', width: '20%', background: 'rgba(255,255,255,0.02)', borderRadius: '2px' }} />
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  // NY VARIANT 2: Imiterar rutan "Active Dataset Mounted" under uppladdningsfasen
+  if (variant === 'uploader-progress') {
+    return (
+      <div className="pulse-element" style={{
+        background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.5) 0%, rgba(15, 23, 42, 0.5) 100%)',
+        padding: '24px',
+        borderRadius: '16px',
+        border: '1px solid rgba(255, 255, 255, 0.05)',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '16px',
+        width: '100%',
+        boxSizing: 'border-box'
+      }}>
+        {injectStyle}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#64748b' }} />
+          <div style={{ height: '12px', width: '160px', background: 'rgba(255,255,255,0.05)', borderRadius: '4px' }} />
+        </div>
+        <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+          <div style={{ height: '14px', width: '100px', background: 'rgba(255,255,255,0.03)', borderRadius: '4px' }} />
+          <div style={{ display: 'flex', gap: '6px' }}>
+            <div style={{ height: '20px', width: '50px', background: 'rgba(255,255,255,0.02)', borderRadius: '4px' }} />
+            <div style={{ height: '20px', width: '60px', background: 'rgba(255,255,255,0.02)', borderRadius: '4px' }} />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (variant === 'ai-chat') {
     return (
       <div className="pulse-element" style={{
@@ -31,14 +87,10 @@ export const SkeletonLoader: React.FC<SkeletonLoaderProps> = ({ variant = 'defau
         marginBottom: '20px'
       }}>
         {injectStyle}
-
-        {/* Användarens fråga (Platshållare) */}
         <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
           <div style={{ height: '14px', width: '45px', background: 'rgba(56, 189, 248, 0.2)', borderRadius: '4px' }} />
           <div style={{ height: '14px', width: '40%', background: 'rgba(226, 232, 240, 0.05)', borderRadius: '4px' }} />
         </div>
-
-        {/* Oraklets svar (Grönaktig pulserande box) */}
         <div style={{
           background: 'rgba(16, 185, 129, 0.02)',
           padding: '14px',
@@ -52,8 +104,6 @@ export const SkeletonLoader: React.FC<SkeletonLoaderProps> = ({ variant = 'defau
           <div style={{ height: '12px', width: '90%', background: 'rgba(16, 185, 129, 0.04)', borderRadius: '4px' }} />
           <div style={{ height: '12px', width: '75%', background: 'rgba(16, 185, 129, 0.04)', borderRadius: '4px' }} />
         </div>
-
-        {/* Kedjans interna resonemang (Mörk streckad box) */}
         <div style={{
           background: '#020617',
           border: '1px dashed rgba(255, 255, 255, 0.03)',

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ChatSession } from '../types';
 import { SkeletonLoader } from './SkeletonLoader';
+import { useToast } from '../context/ToastContext'; // 1. Importera global toast-hook
 
 interface SidebarProps {
   sessions: ChatSession[];
@@ -8,7 +9,7 @@ interface SidebarProps {
   onSelectSession: (id: string) => void;
   onNewChat: () => void;
   onClearHistory: () => void;
-  loading?: boolean; // Ny prop för att styra laddningstillståndet
+  loading?: boolean;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -21,10 +22,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isOpen, setIsOpen] = useState(true);
+  const { showToast } = useToast(); // 2. Initiera toasten
 
   const filteredSessions = sessions.filter(session =>
     session.title.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  // 3. Hantera rensning av historik med en toast-notifikation
+  const handlePurgeHistory = () => {
+    onClearHistory();
+    showToast('Sessionshistoriken har raderats och rensats permanent.', 'error');
+  };
 
   if (!isOpen) {
     return (
@@ -103,7 +111,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         + Ny session
       </button>
 
-      {/* Sökfält - Döljs eller inaktiveras vid laddning */}
+      {/* Sökfält */}
       {!loading && (
         <input
           type="text"
@@ -141,11 +149,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
 
         {loading ? (
-          // Injektera den skräddarsydda sidomenys-loadern under laddningssekvensen
           <SkeletonLoader variant="sidebar-items" />
         ) : filteredSessions.length === 0 ? (
           <div style={{ fontSize: '12px', color: '#334155', fontStyle: 'italic', padding: '10px' }}>
-            Ingen historik lagrad ännu
+            {searchTerm ? 'Inga matchande sessioner hittades' : 'Ingen historik lagrad ännu'}
           </div>
         ) : (
           filteredSessions.map((session) => {
@@ -176,10 +183,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
         )}
       </div>
 
-      {/* Rensa-knapp i botten */}
+      {/* Rensa-knapp i botten (Använder nu handlePurgeHistory) */}
       {!loading && sessions.length > 0 && (
         <button
-          onClick={onClearHistory}
+          onClick={handlePurgeHistory}
           style={{
             background: 'none',
             border: 'none',

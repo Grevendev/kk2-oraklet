@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { ChatSession } from '../types';
+import { SkeletonLoader } from './SkeletonLoader';
 
 interface SidebarProps {
   sessions: ChatSession[];
@@ -7,6 +8,7 @@ interface SidebarProps {
   onSelectSession: (id: string) => void;
   onNewChat: () => void;
   onClearHistory: () => void;
+  loading?: boolean; // Ny prop för att styra laddningstillståndet
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -14,7 +16,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   currentSessionId,
   onSelectSession,
   onNewChat,
-  onClearHistory
+  onClearHistory,
+  loading = false
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isOpen, setIsOpen] = useState(true);
@@ -54,7 +57,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   return (
     <div style={{
       width: '280px',
-      minWidth: '280px', // Hindrar sidopanelen från att pressas ihop på mindre skärmar
+      minWidth: '280px',
       height: '100vh',
       background: '#050b14',
       borderRight: '1px solid rgba(255, 255, 255, 0.05)',
@@ -81,6 +84,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* Ny session */}
       <button
         onClick={onNewChat}
+        disabled={loading}
         style={{
           width: '100%',
           padding: '12px',
@@ -91,36 +95,39 @@ export const Sidebar: React.FC<SidebarProps> = ({
           borderRadius: '8px',
           fontWeight: 600,
           fontSize: '13px',
-          cursor: 'pointer',
-          transition: 'all 0.2s'
+          cursor: loading ? 'not-allowed' : 'pointer',
+          transition: 'all 0.2s',
+          opacity: loading ? 0.5 : 1
         }}
       >
         + Ny session
       </button>
 
-      {/* Sökfält */}
-      <input
-        type="text"
-        placeholder="Sök i tidigare tasks..."
-        value={searchTerm}
-        onChange={(e) => setSearchTerm(e.target.value)}
-        style={{
-          width: '100%',
-          padding: '10px 12px',
-          marginBottom: '24px',
-          background: 'rgba(255, 255, 255, 0.02)',
-          border: '1px solid rgba(255, 255, 255, 0.06)',
-          borderRadius: '8px',
-          color: '#f8fafc',
-          fontSize: '13px',
-          outline: 'none',
-          boxSizing: 'border-box'
-        }}
-      />
+      {/* Sökfält - Döljs eller inaktiveras vid laddning */}
+      {!loading && (
+        <input
+          type="text"
+          placeholder="Sök i tidigare tasks..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          style={{
+            width: '100%',
+            padding: '10px 12px',
+            marginBottom: '24px',
+            background: 'rgba(255, 255, 255, 0.02)',
+            border: '1px solid rgba(255, 255, 255, 0.06)',
+            borderRadius: '8px',
+            color: '#f8fafc',
+            fontSize: '13px',
+            outline: 'none',
+            boxSizing: 'border-box'
+          }}
+        />
+      )}
 
       {/* Lista med GÖMD scrollbar */}
       <div
-        className="hide-scrollbar" // Lägger till klassen som dödar scrollbaren helt
+        className="hide-scrollbar"
         style={{
           flex: 1,
           overflowY: 'auto',
@@ -133,7 +140,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
           SENASTE AKTIVITETER
         </div>
 
-        {filteredSessions.length === 0 ? (
+        {loading ? (
+          // Injektera den skräddarsydda sidomenys-loadern under laddningssekvensen
+          <SkeletonLoader variant="sidebar-items" />
+        ) : filteredSessions.length === 0 ? (
           <div style={{ fontSize: '12px', color: '#334155', fontStyle: 'italic', padding: '10px' }}>
             Ingen historik lagrad ännu
           </div>
@@ -167,7 +177,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       {/* Rensa-knapp i botten */}
-      {sessions.length > 0 && (
+      {!loading && sessions.length > 0 && (
         <button
           onClick={onClearHistory}
           style={{

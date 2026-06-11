@@ -3,7 +3,7 @@ import { ChatSession } from '../types';
 import { SkeletonLoader } from './SkeletonLoader';
 import { useToast } from '../context/ToastContext';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Settings } from './Settings'; // Importera den nya Settings-komponenten
+import { Settings } from './Settings';
 
 interface SidebarProps {
   sessions: ChatSession[];
@@ -38,13 +38,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
   return (
     <AnimatePresence mode="wait">
       {!isOpen ? (
-        // Stängd Sidebar-knapp animeras in
         <motion.button
           key="open-btn"
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
           exit={{ opacity: 0, x: -20 }}
-          whileHover={{ scale: 1.05, borderColor: 'rgba(56, 189, 248, 0.5)' }}
+          whileHover={{ scale: 1.05, borderColor: 'var(--accent)' }}
           whileTap={{ scale: 0.95 }}
           onClick={() => setIsOpen(true)}
           style={{
@@ -52,9 +51,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
             left: '20px',
             top: '20px',
             zIndex: 50,
-            background: '#0f172a',
-            color: '#38bdf8',
-            border: '1px solid rgba(56, 189, 248, 0.2)',
+            background: 'var(--bg-sidebar)',
+            color: 'var(--accent)',
+            border: '1px solid var(--accent)',
             borderRadius: '8px',
             padding: '10px 14px',
             cursor: 'pointer',
@@ -69,7 +68,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <span>📁</span> Visa historik
         </motion.button>
       ) : (
-        // Öppen Sidebar panel expanderar och glider fram mjukt
         <motion.div
           key="sidebar-panel"
           initial={{ width: 0, opacity: 0, minWidth: 0 }}
@@ -78,8 +76,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
           transition={{ type: 'spring', stiffness: 300, damping: 30 }}
           style={{
             height: '100vh',
-            background: 'var(--bg-sidebar)', // Dynamisk CSS-variabel för ljust/mörkt läge
-            borderRight: '1px solid var(--border-color)', // Dynamisk CSS-variabel
+            background: 'var(--bg-sidebar)',
+            borderRight: '1px solid var(--border-color)',
             display: 'flex',
             flexDirection: 'column',
             padding: '20px',
@@ -94,7 +92,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               MEMORY_DASHBOARD
             </span>
             <motion.button
-              whileHover={{ scale: 1.2, color: '#f43f5e' }}
+              whileHover={{ scale: 1.2, color: 'var(--error)' }}
               onClick={() => setIsOpen(false)}
               style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '16px' }}
               title="Göm panel"
@@ -103,9 +101,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </motion.button>
           </div>
 
-          {/* Ny session knapp med mikrointeraktioner */}
+          {/* Ny session knapp */}
           <motion.button
-            whileHover={loading ? {} : { scale: 1.02, background: 'rgba(56, 189, 248, 0.08)', borderColor: 'rgba(56, 189, 248, 0.5)' }}
+            whileHover={loading ? {} : { scale: 1.02, background: 'var(--bg-accent-light)', borderColor: 'var(--accent)' }}
             whileTap={loading ? {} : { scale: 0.98 }}
             onClick={onNewChat}
             disabled={loading}
@@ -113,9 +111,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
               width: '100%',
               padding: '12px',
               marginBottom: '16px',
-              background: 'rgba(56, 189, 248, 0.04)',
-              color: '#38bdf8',
-              border: '1px dashed rgba(56, 189, 248, 0.25)',
+              background: 'transparent',
+              color: 'var(--accent)',
+              border: '1px dashed var(--accent)',
               borderRadius: '8px',
               fontWeight: 600,
               fontSize: '13px',
@@ -138,7 +136,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 width: '100%',
                 padding: '10px 12px',
                 marginBottom: '24px',
-                background: 'rgba(255, 255, 255, 0.02)',
+                background: 'var(--bg-app)',
                 border: '1px solid var(--border-color)',
                 borderRadius: '8px',
                 color: 'var(--text-main)',
@@ -149,7 +147,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             />
           )}
 
-          {/* Lista med GÖMD scrollbar */}
+          {/* Lista med sessioner */}
           <div
             className="hide-scrollbar"
             style={{
@@ -181,12 +179,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, x: -10 }}
-                      whileHover={{ x: 4, background: 'rgba(255, 255, 255, 0.04)', color: 'var(--text-main)' }}
+                      whileHover={{ x: 4, background: 'var(--bg-accent-light)', color: 'var(--text-main)' }}
                       onClick={() => onSelectSession(session.id)}
                       style={{
                         padding: '12px',
                         borderRadius: '8px',
-                        background: isActive ? 'rgba(255, 255, 255, 0.04)' : 'transparent',
+                        background: isActive ? 'var(--bg-accent-light)' : 'transparent',
                         color: isActive ? 'var(--text-main)' : 'var(--text-muted)',
                         fontSize: '13px',
                         fontWeight: isActive ? 600 : 400,
@@ -206,10 +204,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
             )}
           </div>
 
-          {/* Inställningskomponent injicerad säkert ovanför destruktiva systemkommandon */}
           <Settings />
 
-          {/* Rensa-knapp i botten */}
+          {/* Rensa-knapp */}
           {!loading && sessions.length > 0 && (
             <motion.button
               whileHover={{ opacity: 1, x: 2 }}
@@ -217,7 +214,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               style={{
                 background: 'none',
                 border: 'none',
-                color: '#f43f5e',
+                color: 'var(--error)',
                 fontSize: '11px',
                 cursor: 'pointer',
                 textAlign: 'left',

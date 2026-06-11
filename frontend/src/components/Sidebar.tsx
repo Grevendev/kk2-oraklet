@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { ChatSession } from '../types';
 import { SkeletonLoader } from './SkeletonLoader';
-import { useToast } from '../context/ToastContext'; // 1. Importera global toast-hook
+import { useToast } from '../context/ToastContext';
+import { motion, AnimatePresence } from 'framer-motion'; // Importera Framer Motion
 
 interface SidebarProps {
   sessions: ChatSession[];
@@ -22,186 +23,211 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isOpen, setIsOpen] = useState(true);
-  const { showToast } = useToast(); // 2. Initiera toasten
+  const { showToast } = useToast();
 
   const filteredSessions = sessions.filter(session =>
     session.title.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  // 3. Hantera rensning av historik med en toast-notifikation
   const handlePurgeHistory = () => {
     onClearHistory();
     showToast('Sessionshistoriken har raderats och rensats permanent.', 'error');
   };
 
-  if (!isOpen) {
-    return (
-      <button
-        onClick={() => setIsOpen(true)}
-        style={{
-          position: 'fixed',
-          left: '20px',
-          top: '20px',
-          zIndex: 50,
-          background: '#0f172a',
-          color: '#38bdf8',
-          border: '1px solid rgba(56, 189, 248, 0.2)',
-          borderRadius: '8px',
-          padding: '10px 14px',
-          cursor: 'pointer',
-          fontFamily: 'sans-serif',
-          fontSize: '13px',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '6px'
-        }}
-      >
-        <span>📁</span> Visa historik
-      </button>
-    );
-  }
-
   return (
-    <div style={{
-      width: '280px',
-      minWidth: '280px',
-      height: '100vh',
-      background: '#050b14',
-      borderRight: '1px solid rgba(255, 255, 255, 0.05)',
-      display: 'flex',
-      flexDirection: 'column',
-      padding: '20px',
-      boxShadow: '4px 0 30px rgba(0,0,0,0.4)',
-      boxSizing: 'border-box'
-    }}>
-      {/* Top Kontroller */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-        <span style={{ fontSize: '11px', fontFamily: 'monospace', color: '#475569', letterSpacing: '0.05em', fontWeight: 600 }}>
-          MEMORY_DASHBOARD
-        </span>
-        <button
-          onClick={() => setIsOpen(false)}
-          style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '16px' }}
-          title="Göm panel"
-        >
-          ✕
-        </button>
-      </div>
-
-      {/* Ny session */}
-      <button
-        onClick={onNewChat}
-        disabled={loading}
-        style={{
-          width: '100%',
-          padding: '12px',
-          marginBottom: '16px',
-          background: 'rgba(56, 189, 248, 0.04)',
-          color: '#38bdf8',
-          border: '1px dashed rgba(56, 189, 248, 0.25)',
-          borderRadius: '8px',
-          fontWeight: 600,
-          fontSize: '13px',
-          cursor: loading ? 'not-allowed' : 'pointer',
-          transition: 'all 0.2s',
-          opacity: loading ? 0.5 : 1
-        }}
-      >
-        + Ny session
-      </button>
-
-      {/* Sökfält */}
-      {!loading && (
-        <input
-          type="text"
-          placeholder="Sök i tidigare tasks..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
+    <AnimatePresence mode="wait">
+      {!isOpen ? (
+        // Stängd Sidebar-knapp animeras in
+        <motion.button
+          key="open-btn"
+          initial={{ opacity: 0, x: -20 }}
+          animate={{ opacity: 1, x: 0 }}
+          exit={{ opacity: 0, x: -20 }}
+          whileHover={{ scale: 1.05, borderColor: 'rgba(56, 189, 248, 0.5)' }}
+          whileTap={{ scale: 0.95 }}
+          onClick={() => setIsOpen(true)}
           style={{
-            width: '100%',
-            padding: '10px 12px',
-            marginBottom: '24px',
-            background: 'rgba(255, 255, 255, 0.02)',
-            border: '1px solid rgba(255, 255, 255, 0.06)',
+            position: 'fixed',
+            left: '20px',
+            top: '20px',
+            zIndex: 50,
+            background: '#0f172a',
+            color: '#38bdf8',
+            border: '1px solid rgba(56, 189, 248, 0.2)',
             borderRadius: '8px',
-            color: '#f8fafc',
-            fontSize: '13px',
-            outline: 'none',
-            boxSizing: 'border-box'
-          }}
-        />
-      )}
-
-      {/* Lista med GÖMD scrollbar */}
-      <div
-        className="hide-scrollbar"
-        style={{
-          flex: 1,
-          overflowY: 'auto',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '6px',
-        }}
-      >
-        <div style={{ fontSize: '11px', color: '#475569', fontWeight: 700, marginBottom: '6px', letterSpacing: '0.03em' }}>
-          SENASTE AKTIVITETER
-        </div>
-
-        {loading ? (
-          <SkeletonLoader variant="sidebar-items" />
-        ) : filteredSessions.length === 0 ? (
-          <div style={{ fontSize: '12px', color: '#334155', fontStyle: 'italic', padding: '10px' }}>
-            {searchTerm ? 'Inga matchande sessioner hittades' : 'Ingen historik lagrad ännu'}
-          </div>
-        ) : (
-          filteredSessions.map((session) => {
-            const isActive = session.id === currentSessionId;
-            return (
-              <div
-                key={session.id}
-                onClick={() => onSelectSession(session.id)}
-                style={{
-                  padding: '12px',
-                  borderRadius: '8px',
-                  background: isActive ? 'rgba(255, 255, 255, 0.04)' : 'transparent',
-                  color: isActive ? '#f8fafc' : '#94a3b8',
-                  fontSize: '13px',
-                  fontWeight: isActive ? 600 : 400,
-                  cursor: 'pointer',
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  border: isActive ? '1px solid rgba(255, 255, 255, 0.08)' : '1px solid transparent',
-                  boxSizing: 'border-box'
-                }}
-              >
-                {session.title}
-              </div>
-            );
-          })
-        )}
-      </div>
-
-      {/* Rensa-knapp i botten (Använder nu handlePurgeHistory) */}
-      {!loading && sessions.length > 0 && (
-        <button
-          onClick={handlePurgeHistory}
-          style={{
-            background: 'none',
-            border: 'none',
-            color: '#f43f5e',
-            fontSize: '11px',
+            padding: '10px 14px',
             cursor: 'pointer',
-            textAlign: 'left',
-            padding: '10px 0 0 4px',
-            opacity: 0.6,
-            fontFamily: 'monospace'
+            fontFamily: 'sans-serif',
+            fontSize: '13px',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px'
           }}
         >
-          // PURGE_ALL_HISTORY
-        </button>
+          <span>📁</span> Visa historik
+        </motion.button>
+      ) : (
+        // Öppen Sidebar panel expanderar och glider fram mjukt
+        <motion.div
+          key="sidebar-panel"
+          initial={{ width: 0, opacity: 0, minWidth: 0 }}
+          animate={{ width: '280px', opacity: 1, minWidth: '280px' }}
+          exit={{ width: 0, opacity: 0, minWidth: 0 }}
+          transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+          style={{
+            height: '100vh',
+            background: '#050b14',
+            borderRight: '1px solid rgba(255, 255, 255, 0.05)',
+            display: 'flex',
+            flexDirection: 'column',
+            padding: '20px',
+            boxShadow: '4px 0 30px rgba(0,0,0,0.4)',
+            boxSizing: 'border-box',
+            overflow: 'hidden' // Viktigt under tiden panelen expanderar/krymper
+          }}
+        >
+          {/* Top Kontroller */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+            <span style={{ fontSize: '11px', fontFamily: 'monospace', color: '#475569', letterSpacing: '0.05em', fontWeight: 600 }}>
+              MEMORY_DASHBOARD
+            </span>
+            <motion.button
+              whileHover={{ scale: 1.2, color: '#f43f5e' }}
+              onClick={() => setIsOpen(false)}
+              style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '16px' }}
+              title="Göm panel"
+            >
+              ✕
+            </motion.button>
+          </div>
+
+          {/* Ny session knapp med mikrointeraktioner */}
+          <motion.button
+            whileHover={loading ? {} : { scale: 1.02, background: 'rgba(56, 189, 248, 0.08)', borderColor: 'rgba(56, 189, 248, 0.5)' }}
+            whileTap={loading ? {} : { scale: 0.98 }}
+            onClick={onNewChat}
+            disabled={loading}
+            style={{
+              width: '100%',
+              padding: '12px',
+              marginBottom: '16px',
+              background: 'rgba(56, 189, 248, 0.04)',
+              color: '#38bdf8',
+              border: '1px dashed rgba(56, 189, 248, 0.25)',
+              borderRadius: '8px',
+              fontWeight: 600,
+              fontSize: '13px',
+              cursor: loading ? 'not-allowed' : 'pointer',
+              transition: 'opacity 0.2s',
+              opacity: loading ? 0.5 : 1
+            }}
+          >
+            + Ny session
+          </motion.button>
+
+          {/* Sökfält */}
+          {!loading && (
+            <input
+              type="text"
+              placeholder="Sök i tidigare tasks..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '10px 12px',
+                marginBottom: '24px',
+                background: 'rgba(255, 255, 255, 0.02)',
+                border: '1px solid rgba(255, 255, 255, 0.06)',
+                borderRadius: '8px',
+                color: '#f8fafc',
+                fontSize: '13px',
+                outline: 'none',
+                boxSizing: 'border-box'
+              }}
+            />
+          )}
+
+          {/* Lista med GÖMD scrollbar */}
+          <div
+            className="hide-scrollbar"
+            style={{
+              flex: 1,
+              overflowY: 'auto',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '6px',
+            }}
+          >
+            <div style={{ fontSize: '11px', color: '#475569', fontWeight: 700, marginBottom: '6px', letterSpacing: '0.03em' }}>
+              SENASTE AKTIVITETER
+            </div>
+
+            {loading ? (
+              <SkeletonLoader variant="sidebar-items" />
+            ) : filteredSessions.length === 0 ? (
+              <div style={{ fontSize: '12px', color: '#334155', fontStyle: 'italic', padding: '10px' }}>
+                {searchTerm ? 'Inga matchande sessioner hittades' : 'Ingen historik lagrad ännu'}
+              </div>
+            ) : (
+              // AnimatePresence låter list-items glida bort snyggt vid filtrering eller borttagning
+              <AnimatePresence>
+                {filteredSessions.map((session) => {
+                  const isActive = session.id === currentSessionId;
+                  return (
+                    <motion.div
+                      key={session.id}
+                      layout
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, x: -10 }}
+                      whileHover={{ x: 4, background: 'rgba(255, 255, 255, 0.04)', color: '#f8fafc' }}
+                      onClick={() => onSelectSession(session.id)}
+                      style={{
+                        padding: '12px',
+                        borderRadius: '8px',
+                        background: isActive ? 'rgba(255, 255, 255, 0.04)' : 'transparent',
+                        color: isActive ? '#f8fafc' : '#94a3b8',
+                        fontSize: '13px',
+                        fontWeight: isActive ? 600 : 400,
+                        cursor: 'pointer',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        border: isActive ? '1px solid rgba(255, 255, 255, 0.08)' : '1px solid transparent',
+                        boxSizing: 'border-box'
+                      }}
+                    >
+                      {session.title}
+                    </motion.div>
+                  );
+                })}
+              </AnimatePresence>
+            )}
+          </div>
+
+          {/* Rensa-knapp i botten */}
+          {!loading && sessions.length > 0 && (
+            <motion.button
+              whileHover={{ opacity: 1, x: 2 }}
+              onClick={handlePurgeHistory}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#f43f5e',
+                fontSize: '11px',
+                cursor: 'pointer',
+                textAlign: 'left',
+                padding: '10px 0 0 4px',
+                opacity: 0.6,
+                fontFamily: 'monospace'
+              }}
+            >
+              // PURGE_ALL_HISTORY
+            </motion.button>
+          )}
+        </motion.div>
       )}
-    </div>
+    </AnimatePresence>
   );
 };
